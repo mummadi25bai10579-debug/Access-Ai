@@ -1,0 +1,8 @@
+{
+  "name": "@accessai/contracts",
+  "version": "0.1.0",
+  "description": "Shared OpenAPI 3.1 schema and TypeScript type definitions for AccessAI",
+  "main": "types/index.ts",
+  "types": "types/index.ts",
+  "license": "Apache-2.0"
+}

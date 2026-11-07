@@ -1,0 +1,289 @@
+{
+  "openapi": "3.1.0",
+  "info": {
+    "title": "AccessAI API",
+    "description": "Universal Access & Opportunity Intelligence Platform API",
+    "version": "1.0.0"
+  },
+  "servers": [
+    {
+      "url": "/api/v1",
+      "description": "API v1 Endpoint"
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "summary": "Health check",
+        "description": "Returns operational status of API and database",
+        "responses": {
+          "200": {
+            "description": "System operational",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HealthResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/users/me": {
+      "get": {
+        "summary": "Current user profile",
+        "security": [{ "BearerAuth": [] }],
+        "responses": {
+          "200": {
+            "description": "Profile data",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/UserProfileResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      "patch": {
+        "summary": "Update profile",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateProfileRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": { "description": "Profile updated" }
+        }
+      }
+    },
+    "/documents/upload": {
+      "post": {
+        "summary": "Upload document for processing",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "file": { "type": "string", "format": "binary" },
+                  "language": { "type": "string", "default": "en" },
+                  "processing_mode": { "type": "string", "enum": ["full", "summary", "accessibility"] }
+                },
+                "required": ["file"]
+              }
+            }
+          }
+        },
+        "responses": {
+          "202": { "description": "Document accepted for processing" }
+        }
+      }
+    },
+    "/access/ask": {
+      "post": {
+        "summary": "Ask your document with grounded RAG",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GroundedQARequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Grounded answer with citations",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/GroundedQAResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/schemes/match": {
+      "post": {
+        "summary": "Evaluate citizen eligibility against verified schemes",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SchemeMatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Eligibility evaluation result",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SchemeMatchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/opportunities/match": {
+      "post": {
+        "summary": "Match opportunities using multi-factor ranking formula",
+        "security": [{ "BearerAuth": [] }],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/OpportunityMatchRequest"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Ranked opportunity matches",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/OpportunityMatchResponse"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "BearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT"
+      }
+    },
+    "schemas": {
+      "HealthResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "status": { "type": "string" },
+              "version": { "type": "string" },
+              "database": { "type": "string" }
+            }
+          },
+          "request_id": { "type": "string" }
+        }
+      },
+      "UserProfileResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": { "type": "object" },
+          "request_id": { "type": "string" }
+        }
+      },
+      "UpdateProfileRequest": {
+        "type": "object",
+        "properties": {
+          "full_name": { "type": "string" },
+          "education_level": { "type": "string" },
+          "preferred_language": { "type": "string" },
+          "skills": { "type": "array", "items": { "type": "string" } }
+        }
+      },
+      "GroundedQARequest": {
+        "type": "object",
+        "properties": {
+          "document_id": { "type": "string", "format": "uuid" },
+          "question": { "type": "string" },
+          "language": { "type": "string", "default": "en" },
+          "include_citations": { "type": "boolean", "default": true }
+        },
+        "required": ["document_id", "question"]
+      },
+      "GroundedQAResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "answer": { "type": "string" },
+              "language": { "type": "string" },
+              "confidence": { "type": "string" },
+              "citations": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "request_id": { "type": "string" }
+        }
+      },
+      "SchemeMatchRequest": {
+        "type": "object",
+        "properties": {
+          "profile": { "type": "object" },
+          "language": { "type": "string", "default": "en" }
+        },
+        "required": ["profile"]
+      },
+      "SchemeMatchResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "matches": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "request_id": { "type": "string" }
+        }
+      },
+      "OpportunityMatchRequest": {
+        "type": "object",
+        "properties": {
+          "profile": { "type": "object" },
+          "filters": { "type": "object" }
+        },
+        "required": ["profile"]
+      },
+      "OpportunityMatchResponse": {
+        "type": "object",
+        "properties": {
+          "success": { "type": "boolean" },
+          "data": {
+            "type": "object",
+            "properties": {
+              "matches": { "type": "array", "items": { "type": "object" } }
+            }
+          },
+          "request_id": { "type": "string" }
+        }
+      }
+    }
+  }
+}

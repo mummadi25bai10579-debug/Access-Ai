@@ -1,0 +1,42 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --font-scale: 1.0;
+  --background: #f8fafc;
+  --foreground: #0f172a;
+  --card: #ffffff;
+  --card-foreground: #0f172a;
+  --border: #e2e8f0;
+  --primary: #0284c7;
+  --primary-hover: #0369a1;
+  --primary-foreground: #ffffff;
+  --accent: #f1f5f9;
+  --accent-foreground: #0f172a;
+}
+
+/* High Contrast Mode (WCAG 2.2 AAA Contrast > 7:1) */
+.high-contrast {
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #121212;
+  --card-foreground: #ffffff;
+  --border: #ffff00;
+  --primary: #ffff00;
+  --primary-hover: #e6e600;
+  --primary-foreground: #000000;
+  --accent: #222222;
+  --accent-foreground: #ffff00;
+}
+
+html {
+  font-size: calc(16px * var(--font-scale, 1.0));
+  scroll-behavior: smooth;
+}
+
+/* Accessible visible focus ring on interactive elements */
+:focus-visible {
+  outline: 3px solid var(--primary);
+  outline-offset: 3px;
+}

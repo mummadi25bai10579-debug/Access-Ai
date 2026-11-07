@@ -1,0 +1,34 @@
+name: AccessAI CI
+
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  test-backend:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Run Test Suite
+        run: |
+          chmod +x scripts/run_tests.sh
+          ./scripts/run_tests.sh
+
+  verify-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Verify Seed SQL & Contracts
+        run: |
+          python3 scripts/seed_db.py
+          test -f packages/contracts/openapi/openapi.json
+          test -f packages/contracts/types/index.ts
