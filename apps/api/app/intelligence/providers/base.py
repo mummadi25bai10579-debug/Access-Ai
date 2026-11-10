@@ -31,6 +31,7 @@ class AIProvider(ABC):
     async def embed(
         self,
         texts: List[str],
+        task_type: str = "RETRIEVAL_DOCUMENT",
     ) -> List[List[float]]:
         """Compute dense vector embeddings (384 dimensions)."""
         pass

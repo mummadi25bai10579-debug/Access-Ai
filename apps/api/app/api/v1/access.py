@@ -68,3 +68,22 @@ async def describe_image(
         },
         "request_id": getattr(request.state, "request_id", "req-id"),
     }
+
+class SummarizeTextRequest(BaseModel):
+    text: str
+    language: str = "en"
+    max_length: Optional[int] = 300
+
+@router.post("/summarize")
+async def summarize_text(
+    body: SummarizeTextRequest,
+    request: Request,
+    service: AccessService = Depends(get_access_service),
+):
+    prompt = f"Provide a concise, accessible summary of the following document content in {body.language}:\n\n{body.text}"
+    summary = await service.orchestrator.provider.generate(prompt)
+    return {
+        "success": True,
+        "data": {"summary": summary, "language": body.language},
+        "request_id": getattr(request.state, "request_id", "req-id"),
+    }

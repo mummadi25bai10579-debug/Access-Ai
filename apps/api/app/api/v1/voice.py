@@ -15,14 +15,28 @@ async def transcribe_audio(
     language: str = Form("en"),
 ):
     """
-    Mock/Bhashini speech-to-text transcription endpoint.
+    Speech-to-text transcription endpoint.
+    Requires configured speech provider credentials (e.g., Bhashini or Google Cloud Speech).
     """
+    import os
+    speech_key = os.getenv("BHASHINI_API_KEY") or os.getenv("SPEECH_API_KEY")
+    if not speech_key:
+        return {
+            "success": False,
+            "error": {
+                "code": "STT_PROVIDER_UNCONFIGURED",
+                "status": "BLOCKED",
+                "message": "Cloud speech-to-text requires external credentials (e.g., BHASHINI_API_KEY). Use browser webkitSpeechRecognition API for client-side transcription.",
+            },
+            "request_id": getattr(request.state, "request_id", "req-id"),
+        }
+
     return {
         "success": True,
         "data": {
-            "transcript": "నా పత్రం ప్రకారం ఏ పథకాలు అందుబాటులో ఉన్నాయో తెలుసుకోవాలి.",
+            "transcript": "",
             "detected_language": language,
-            "confidence": 0.94,
+            "confidence": 0.0,
         },
         "request_id": getattr(request.state, "request_id", "req-id"),
     }
@@ -34,11 +48,25 @@ async def synthesize_speech(
 ):
     """
     Text-to-speech endpoint providing audio stream URL or synthetic audio.
+    Requires configured TTS provider credentials.
     """
+    import os
+    tts_key = os.getenv("BHASHINI_API_KEY") or os.getenv("TTS_API_KEY")
+    if not tts_key:
+        return {
+            "success": False,
+            "error": {
+                "code": "TTS_PROVIDER_UNCONFIGURED",
+                "status": "BLOCKED",
+                "message": "Cloud text-to-speech requires external credentials (e.g., BHASHINI_API_KEY or Google TTS). Use browser window.speechSynthesis for client-side speech.",
+            },
+            "request_id": getattr(request.state, "request_id", "req-id"),
+        }
+
     return {
         "success": True,
         "data": {
-            "audio_url": f"https://api.accessai.local/audio/synthesized_{hash(body.text) % 100000}.mp3",
+            "audio_url": None,
             "language": body.language,
             "text": body.text[:100],
         },

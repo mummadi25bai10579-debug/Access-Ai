@@ -1,6 +1,7 @@
 -- ============================================================================
 -- AccessAI - Authoritative Initial Seed Dataset
 -- File: supabase/seed.sql
+-- All IDs are valid RFC 4122 hexadecimal UUIDs
 -- ============================================================================
 
 -- ----------------------------------------------------------------------------
@@ -20,7 +21,7 @@ ON CONFLICT (id) DO NOTHING;
 -- Scheme A: PM-KISAN (Central)
 INSERT INTO schemes (id, name, description, official_url, source_id, state_code, eligibility, required_documents, application_deadline, status)
 VALUES (
-    's1000000-0000-0000-0000-000000000001',
+    'a1000000-0000-0000-0000-000000000001',
     'Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)',
     'Financial benefit of ₹6,000 per year in three equal installments to small and marginal farmer families with cultivable land.',
     'https://pmkisan.gov.in',
@@ -35,7 +36,7 @@ VALUES (
 -- Scheme B: Jagananna Vidya Deevena (Andhra Pradesh State)
 INSERT INTO schemes (id, name, description, official_url, source_id, state_code, eligibility, required_documents, application_deadline, status)
 VALUES (
-    's1000000-0000-0000-0000-000000000002',
+    'a1000000-0000-0000-0000-000000000002',
     'Jagananna Vidya Deevena (RTF)',
     'Full fee reimbursement for students pursuing Polytechnic, ITI, Degree, Engineering, Medicine, and Post-Graduate courses.',
     'https://jnanabhumi.ap.gov.in',
@@ -50,7 +51,7 @@ VALUES (
 -- Scheme C: Post Matric Scholarships for Minorities (NSP Central)
 INSERT INTO schemes (id, name, description, official_url, source_id, state_code, eligibility, required_documents, application_deadline, status)
 VALUES (
-    's1000000-0000-0000-0000-000000000003',
+    'a1000000-0000-0000-0000-000000000003',
     'Post Matric Scholarships Scheme for Minorities',
     'Scholarship awarded to meritorious students belonging to notified minority communities studying from class 11 to Ph.D.',
     'https://scholarships.gov.in',
@@ -65,7 +66,7 @@ VALUES (
 -- Scheme D: AICTE Pragati Scholarship for Girls
 INSERT INTO schemes (id, name, description, official_url, source_id, state_code, eligibility, required_documents, application_deadline, status)
 VALUES (
-    's1000000-0000-0000-0000-000000000004',
+    'a1000000-0000-0000-0000-000000000004',
     'AICTE Pragati Scholarship for Girl Students',
     '₹50,000 per annum for tuition and contingency to girl students admitted to 1st year of technical degree or diploma courses.',
     'https://www.aicte-india.org/schemes/students-development-schemes/pragati',
@@ -83,15 +84,15 @@ VALUES (
 -- Rules for Jagananna Vidya Deevena
 INSERT INTO scheme_eligibility_rules (scheme_id, rule_key, operator, expected_value, is_mandatory, description)
 VALUES
-    ('s1000000-0000-0000-0000-000000000002', 'state_code', '==', '"AP"'::jsonb, true, 'Citizen must be a resident of Andhra Pradesh'),
-    ('s1000000-0000-0000-0000-000000000002', 'annual_family_income', '<=', '250000'::jsonb, true, 'Annual family income must not exceed ₹2,50,000'),
-    ('s1000000-0000-0000-0000-000000000002', 'education_level', 'in', '["diploma", "undergraduate", "postgraduate"]'::jsonb, true, 'Must be enrolled in Polytechnic, Degree, or PG');
+    ('a1000000-0000-0000-0000-000000000002', 'state_code', '==', '"AP"'::jsonb, true, 'Citizen must be a resident of Andhra Pradesh'),
+    ('a1000000-0000-0000-0000-000000000002', 'annual_family_income', '<=', '250000'::jsonb, true, 'Annual family income must not exceed ₹2,50,000'),
+    ('a1000000-0000-0000-0000-000000000002', 'education_level', 'in', '["diploma", "undergraduate", "postgraduate"]'::jsonb, true, 'Must be enrolled in Polytechnic, Degree, or PG');
 
 -- Rules for AICTE Pragati
 INSERT INTO scheme_eligibility_rules (scheme_id, rule_key, operator, expected_value, is_mandatory, description)
 VALUES
-    ('s1000000-0000-0000-0000-000000000004', 'gender', '==', '"female"'::jsonb, true, 'Applicant must be a female student'),
-    ('s1000000-0000-0000-0000-000000000004', 'annual_family_income', '<=', '800000'::jsonb, true, 'Annual family income must not exceed ₹8,00,000');
+    ('a1000000-0000-0000-0000-000000000004', 'gender', '==', '"female"'::jsonb, true, 'Applicant must be a female student'),
+    ('a1000000-0000-0000-0000-000000000004', 'annual_family_income', '<=', '800000'::jsonb, true, 'Annual family income must not exceed ₹8,00,000');
 
 -- ----------------------------------------------------------------------------
 -- 4. OPPORTUNITIES (Jobs, Internships, Hackathons)
@@ -99,7 +100,7 @@ VALUES
 INSERT INTO opportunities (id, title, description, opportunity_type, organization, location, official_url, required_skills, eligibility, deadline, status)
 VALUES
     (
-        'o1000000-0000-0000-0000-000000000001',
+        'b1000000-0000-0000-0000-000000000001',
         'AI & Full-Stack Engineering Internship',
         '3-month remote engineering internship building accessibility tools and multilingual AI agents using Python and Next.js.',
         'internship',
@@ -112,7 +113,7 @@ VALUES
         'active'
     ),
     (
-        'o1000000-0000-0000-0000-000000000002',
+        'b1000000-0000-0000-0000-000000000002',
         'Digital India AI Hackathon 2026',
         'National grand challenge to create voice-enabled assistive applications for Indian public services.',
         'hackathon',
@@ -125,7 +126,7 @@ VALUES
         'active'
     ),
     (
-        'o1000000-0000-0000-0000-000000000003',
+        'b1000000-0000-0000-0000-000000000003',
         'Junior Cloud & Backend Engineer',
         'Full-time opening for entry-level backend engineers passionate about building resilient APIs and database pipelines.',
         'job',
@@ -157,5 +158,33 @@ VALUES
         'Step-by-step guidance on semantic HTML, accessible UI layouts, and reactive web programming.',
         'en',
         'beginner'
+    )
+ON CONFLICT (id) DO NOTHING;
+
+-- ----------------------------------------------------------------------------
+-- 6. EDUCATION: COURSE MATERIALS
+-- ----------------------------------------------------------------------------
+INSERT INTO course_materials (id, course_id, title, content, order_index)
+VALUES
+    (
+        'e1000000-0000-0000-0000-000000000001',
+        'c1000000-0000-0000-0000-000000000001',
+        'Lesson 1: Python Basics & Variables',
+        'Python is a high-level interpreted programming language. Variables in Python are created when assigned a value. Common basic types are int, float, str, and bool.',
+        1
+    ),
+    (
+        'e1000000-0000-0000-0000-000000000002',
+        'c1000000-0000-0000-0000-000000000001',
+        'Lesson 2: Control Flow & Loops',
+        'In Python, decisions are made using if, elif, and else statements. Loops can be for-loops for iterating over sequences or while-loops for repeated execution while conditions remain true.',
+        2
+    ),
+    (
+        'e1000000-0000-0000-0000-000000000003',
+        'c1000000-0000-0000-0000-000000000002',
+        'Lesson 1: Semantic HTML & Accessibility',
+        'Accessible web applications require semantic tags like <main>, <nav>, <header>, and <button>. Use ARIA labels and live regions when dynamic content updates.',
+        1
     )
 ON CONFLICT (id) DO NOTHING;

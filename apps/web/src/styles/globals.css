@@ -2,41 +2,146 @@
 @tailwind components;
 @tailwind utilities;
 
-:root {
+/* =========================================================================
+   AccessAI Centralized Theme System:
+   1. Pure Black Dark Theme (Default) — True #000000 Surfaces
+   2. Light Theme — Clean Light SaaS Surfaces
+   3. Independent High-Contrast Mode (WCAG 2.2 AAA Contrast > 7:1)
+   ========================================================================= */
+
+/* 1. Pure Black Dark Theme (Default) */
+:root,
+.dark {
   --font-scale: 1.0;
+
+  /* OLED Pure Black Theme Tokens */
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #000000;
+  --card-foreground: #ffffff;
+  --border: #333333;
+
+  /* Primary Interactive Blue Accent */
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
+  --primary-foreground: #ffffff;
+
+  /* Accent & Secondary Surfaces */
+  --accent: #000000;
+  --accent-foreground: #ffffff;
+  --muted: #b3b3b3;
+  --muted-foreground: #888888;
+  --input: #000000;
+
+  /* Status Colors (Accessible against pure black) */
+  --success: #10b981;
+  --success-foreground: #ffffff;
+  --warning: #f59e0b;
+  --warning-foreground: #000000;
+  --danger: #ef4444;
+  --danger-foreground: #ffffff;
+}
+
+/* 2. Light Theme */
+.light {
+  --font-scale: 1.0;
+
   --background: #f8fafc;
   --foreground: #0f172a;
   --card: #ffffff;
   --card-foreground: #0f172a;
   --border: #e2e8f0;
-  --primary: #0284c7;
-  --primary-hover: #0369a1;
+
+  --primary: #2563eb;
+  --primary-hover: #1d4ed8;
   --primary-foreground: #ffffff;
+
   --accent: #f1f5f9;
   --accent-foreground: #0f172a;
+  --muted: #64748b;
+  --muted-foreground: #475569;
+  --input: #ffffff;
+
+  --success: #16a34a;
+  --success-foreground: #ffffff;
+  --warning: #d97706;
+  --warning-foreground: #ffffff;
+  --danger: #dc2626;
+  --danger-foreground: #ffffff;
 }
 
-/* High Contrast Mode (WCAG 2.2 AAA Contrast > 7:1) */
+/* 3. Independent High Contrast Mode (WCAG 2.2 AAA Contrast > 7:1) */
 .high-contrast {
-  --background: #000000;
-  --foreground: #ffffff;
-  --card: #121212;
-  --card-foreground: #ffffff;
-  --border: #ffff00;
-  --primary: #ffff00;
-  --primary-hover: #e6e600;
-  --primary-foreground: #000000;
-  --accent: #222222;
-  --accent-foreground: #ffff00;
+  --background: #000000 !important;
+  --foreground: #ffffff !important;
+  --card: #000000 !important;
+  --card-foreground: #ffffff !important;
+  --border: #ffff00 !important;
+
+  /* High-Visibility Yellow Accent */
+  --primary: #ffff00 !important;
+  --primary-hover: #facc15 !important;
+  --primary-foreground: #000000 !important;
+
+  --accent: #000000 !important;
+  --accent-foreground: #ffff00 !important;
+  --muted: #ffff00 !important;
+  --muted-foreground: #ffffff !important;
+  --input: #000000 !important;
+
+  --success: #4ade80 !important;
+  --success-foreground: #000000 !important;
+  --warning: #ffff00 !important;
+  --warning-foreground: #000000 !important;
+  --danger: #ff4d4d !important;
+  --danger-foreground: #000000 !important;
 }
 
 html {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
   font-size: calc(16px * var(--font-scale, 1.0));
   scroll-behavior: smooth;
+  background-color: var(--background);
+  color: var(--foreground);
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--background);
+  color: var(--foreground);
+  min-height: 100vh;
 }
 
 /* Accessible visible focus ring on interactive elements */
 :focus-visible {
-  outline: 3px solid var(--primary);
-  outline-offset: 3px;
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+}
+
+/* Accessible keyframes for indeterminate progress & skeleton shimmer */
+@keyframes indeterminate {
+  0% {
+    transform: translateX(-100%);
+  }
+  100% {
+    transform: translateX(300%);
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+/* Reduced motion preference */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  ::before,
+  ::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
 }

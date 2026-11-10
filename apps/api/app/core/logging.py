@@ -1,3 +1,4 @@
+import os
 import logging
 import json
 import re
@@ -41,5 +42,6 @@ def get_logger(name: str) -> logging.Logger:
         handler = logging.StreamHandler(sys.stdout)
         handler.setFormatter(StructuredJsonFormatter())
         logger.addHandler(handler)
-        logger.setLevel(logging.INFO)
+        log_level_str = os.getenv("LOG_LEVEL", "INFO").upper()
+        logger.setLevel(getattr(logging, log_level_str, logging.INFO))
     return logger

@@ -14,8 +14,8 @@ dist/
 downloads/
 eggs/
 .eggs/
-lib/
-lib64/
+/lib/
+/lib64/
 parts/
 sdist/
 var/
@@ -40,6 +40,7 @@ lerna-debug.log*
 .next/
 out/
 .turbo/
+*.tsbuildinfo
 
 # Environment and secrets
 .env

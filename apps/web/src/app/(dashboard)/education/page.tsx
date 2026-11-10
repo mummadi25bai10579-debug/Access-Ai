@@ -1,237 +1,173 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@clerk/nextjs";
 import {
-  GraduationCap,
-  Send,
-  Sparkles,
-  HelpCircle,
-  CheckCircle2,
-  XCircle,
   BookOpen,
-  Volume2,
+  Award,
+  CheckCircle2,
+  Brain,
+  AlertCircle,
 } from "lucide-react";
-import { useAccessibilityStore } from "@/stores/accessibilityStore";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
+import { StatCard } from "@/components/ui/StatCard";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { CourseCardSkeleton } from "@/components/ui/Skeleton";
+import { PullToRefresh } from "@/components/ui/PullToRefresh";
+import { InfiniteScroll } from "@/components/ui/InfiniteScroll";
+import { CourseCard, CourseItem } from "@/features/education/CourseCard";
+import { TutorChatBox } from "@/features/education/TutorChatBox";
+import { QuizDrawer } from "@/features/education/QuizDrawer";
+import { ApiClient } from "@/lib/api/client";
+
+const PAGE_SIZE = 4;
 
 export default function EducationPage() {
-  const { speakText } = useAccessibilityStore();
-  const [messages, setMessages] = useState<
-    { role: "user" | "assistant"; content: string; concepts?: string[] }[]
-  >([
-    {
-      role: "assistant",
-      content:
-        "Hello Lakshmi! I am your EduBridge contextual tutor. You're currently studying Python Data Structures. What concept would you like me to explain?",
-      concepts: ["Python Basics", "Variables", "Memory"],
-    },
-  ]);
-  const [input, setInput] = useState("");
-  const [difficulty, setDifficulty] = useState<"beginner" | "intermediate" | "advanced">("beginner");
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [selectedCourse, setSelectedCourse] = useState<CourseItem | null>(null);
+  const [userProgress, setUserProgress] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  // Quiz state
-  const [showQuiz, setShowQuiz] = useState(false);
-  const [selectedOption, setSelectedOption] = useState<number | null>(null);
-  const [quizSubmitted, setQuizSubmitted] = useState(false);
+  const fetchEducationData = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const courseList = await ApiClient.listCourses();
+      if (Array.isArray(courseList)) {
+        setCourses(courseList);
+        if (courseList.length > 0) {
+          setSelectedCourse(courseList[0]);
+        }
+      }
 
-  const handleSend = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!input.trim()) return;
+      if (isSignedIn) {
+        const token = await getToken();
+        const prog = await ApiClient.getProgress(token);
+        setUserProgress(prog);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to load courses");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isSignedIn, getToken]);
 
-    const userMsg = input;
-    setInput("");
-    setMessages((prev) => [...prev, { role: "user", content: userMsg }]);
+  useEffect(() => {
+    fetchEducationData();
+  }, [fetchEducationData]);
 
-    setTimeout(() => {
-      setMessages((prev) => [
-        ...prev,
-        {
-          role: "assistant",
-          content: `In Python, think of a list like a sequence of labeled boxes in a storage room. Each box has an index number starting at 0. When you write \`my_list[0]\`, Python opens the very first box directly without checking the others.`,
-          concepts: ["Lists", "Indexing", "O(1) Access"],
-        },
-      ]);
-    }, 400);
+  const overallMastery = userProgress?.mastery_score ?? 0;
+  const progressPercent = Math.round((userProgress?.progress_percentage ?? 0) * 100);
+  const completedTopicsCount = Array.isArray(userProgress?.completed_topics)
+    ? userProgress.completed_topics.length
+    : 0;
+
+  const displayedCourses = courses.slice(0, visibleCount);
+  const hasMore = visibleCount < courses.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, courses.length));
   };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <div className="flex items-center gap-2">
-            <GraduationCap className="w-6 h-6 text-emerald-600" />
-            <h1 className="text-2xl font-extrabold tracking-tight">
-              EduBridge — AI Contextual Tutor
-            </h1>
-          </div>
-          <p className="text-sm opacity-80 mt-1">
-            Personalized learning paths, interactive conceptual tutoring, and formative quizzes.
-          </p>
-        </div>
+    <PullToRefresh onRefresh={fetchEducationData} className="space-y-8">
+      <PageHeader
+        title="EduBridge Learning Platform"
+        description="Personalized AI tutoring adapting to your pace and language. Understand complex textbook chapters, take formative comprehension quizzes, and close foundational skill gaps."
+        badge={<Badge variant="primary">Active Learning Engine</Badge>}
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "EduBridge" },
+        ]}
+      />
 
-        {/* Difficulty Controls */}
-        <div className="flex items-center gap-2 text-xs border border-border p-1 rounded-lg bg-card">
-          <span className="opacity-75 font-semibold px-2">Difficulty:</span>
-          {(["beginner", "intermediate", "advanced"] as const).map((d) => (
-            <button
-              key={d}
-              onClick={() => setDifficulty(d)}
-              className={`px-2.5 py-1 rounded font-semibold capitalize transition-colors ${
-                difficulty === d
-                  ? "bg-primary text-primary-foreground"
-                  : "hover:bg-accent"
-              }`}
-            >
-              {d}
-            </button>
-          ))}
+      {errorMessage && (
+        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
         </div>
+      )}
+
+      {/* Stats Summary - Live Data */}
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Available Courses"
+          value={`${courses.length} Courses`}
+          subtitle="From educational catalog"
+          icon={<BookOpen className="w-5 h-5 text-primary" />}
+        />
+        <StatCard
+          label="Mastery Score"
+          value={`${overallMastery} / 100`}
+          subtitle={isSignedIn ? "Calculated from quiz performance" : "Sign in to track progress"}
+          icon={<Award className="w-5 h-5 text-purple-500 dark:text-purple-400" />}
+        />
+        <StatCard
+          label="Topics Completed"
+          value={`${completedTopicsCount} Topics`}
+          subtitle={`Overall Progress: ${progressPercent}%`}
+          icon={<CheckCircle2 className="w-5 h-5 text-emerald-500 dark:text-emerald-400" />}
+        />
+        <StatCard
+          label="Target Learning Path"
+          value="AI & Engineering"
+          subtitle="Adaptive curriculum"
+          icon={<Brain className="w-5 h-5 text-sky-500 dark:text-sky-400" />}
+        />
       </div>
 
-      {/* Tutor Dialogue Area */}
-      <div className="p-6 rounded-xl border border-border bg-card space-y-4">
-        <div className="space-y-4 max-h-[360px] overflow-y-auto pr-2">
-          {messages.map((m, idx) => (
-            <div
-              key={idx}
-              className={`flex flex-col ${
-                m.role === "user" ? "items-end" : "items-start"
-              }`}
-            >
-              <div
-                className={`max-w-[85%] p-4 rounded-xl text-sm leading-relaxed space-y-2 ${
-                  m.role === "user"
-                    ? "bg-primary text-primary-foreground font-medium rounded-br-none"
-                    : "bg-accent border border-border rounded-bl-none"
-                }`}
-              >
-                <div className="flex items-center justify-between gap-4">
-                  <span className="font-bold text-xs uppercase tracking-wider opacity-75">
-                    {m.role === "user" ? "Lakshmi" : "EduBridge AI Tutor"}
-                  </span>
-                  {m.role === "assistant" && (
-                    <button
-                      onClick={() => speakText(m.content)}
-                      className="p-1 hover:bg-card rounded focus-visible:ring-1"
-                      title="Read aloud"
-                    >
-                      <Volume2 className="w-3.5 h-3.5 text-primary" />
-                    </button>
-                  )}
-                </div>
-                <p>{m.content}</p>
+      {/* Active AI Tutor Dialogue */}
+      <TutorChatBox course={selectedCourse} />
 
-                {m.concepts && m.concepts.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5 pt-1">
-                    {m.concepts.map((c, i) => (
-                      <span
-                        key={i}
-                        className="text-[10px] px-2 py-0.5 rounded-full bg-background border border-border font-semibold text-foreground"
-                      >
-                        🏷️ {c}
-                      </span>
-                    ))}
-                  </div>
-                )}
-              </div>
+      {/* Course Catalog & Interactive Quiz */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg sm:text-xl font-bold text-foreground">Curriculum Courses</h2>
+            <span className="text-xs sm:text-sm text-muted">
+              {courses.length > 0 ? "Select course to switch tutor focus" : "No courses available"}
+            </span>
+          </div>
+
+          {isLoading ? (
+            <div className="grid sm:grid-cols-2 gap-4">
+              <CourseCardSkeleton count={4} />
             </div>
-          ))}
-        </div>
-
-        {/* Input Box */}
-        <form onSubmit={handleSend} className="flex gap-2 pt-2 border-t border-border">
-          <input
-            type="text"
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            placeholder="Ask your tutor any question (e.g. What is the difference between list and tuple?)..."
-            className="flex-1 px-4 py-2.5 rounded-lg border border-border bg-background text-sm focus:outline-none focus:ring-2 focus:ring-primary"
-            aria-label="Tutor question input"
-          />
-          <button
-            type="submit"
-            className="px-5 py-2.5 rounded-lg bg-primary text-primary-foreground font-semibold text-sm hover:bg-primary-hover flex items-center gap-2 focus-visible:ring-2"
-          >
-            <span>Ask</span>
-            <Send className="w-4 h-4" />
-          </button>
-        </form>
-      </div>
-
-      {/* Formative Quiz Generator Card */}
-      <div className="p-6 rounded-xl border border-border bg-card space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <HelpCircle className="w-5 h-5 text-emerald-600" />
-            <h2 className="text-base font-bold">Knowledge Gap Assessment: Python Basics</h2>
-          </div>
-          <button
-            onClick={() => {
-              setShowQuiz(!showQuiz);
-              setQuizSubmitted(false);
-              setSelectedOption(null);
-            }}
-            className="px-3 py-1.5 rounded-md border border-border bg-accent text-xs font-semibold hover:bg-card"
-          >
-            {showQuiz ? "Hide Quiz" : "Generate Quick Quiz (3 Questions)"}
-          </button>
-        </div>
-
-        {showQuiz && (
-          <div className="p-4 rounded-lg border border-border bg-background space-y-4 text-sm">
-            <p className="font-semibold text-sm">
-              Question 1: Which data structure in Python is mutable and allows duplicate elements?
-            </p>
-
-            <div className="space-y-2">
-              {["A. Tuple", "B. List", "C. Set", "D. String"].map((opt, i) => (
-                <label
-                  key={i}
-                  className={`flex items-center gap-3 p-3 rounded-lg border cursor-pointer transition-colors ${
-                    selectedOption === i
-                      ? "border-primary bg-primary/10 font-bold"
-                      : "border-border hover:bg-accent"
-                  }`}
-                >
-                  <input
-                    type="radio"
-                    name="quiz-opt"
-                    checked={selectedOption === i}
-                    onChange={() => setSelectedOption(i)}
-                    className="w-4 h-4 text-primary"
+          ) : courses.length === 0 ? (
+            <EmptyState
+              title="No Courses Found"
+              description="No curriculum courses are currently available in the database."
+            />
+          ) : (
+            <InfiniteScroll
+              hasMore={hasMore}
+              isLoading={false}
+              onLoadMore={handleLoadMore}
+              endMessage="All curriculum courses loaded."
+            >
+              <div className="grid sm:grid-cols-2 gap-4">
+                {displayedCourses.map((course, idx) => (
+                  <CourseCard
+                    key={course.id || `course-${idx}`}
+                    course={course}
+                    onOpenTutor={(c) => setSelectedCourse(c)}
+                    onOpenQuiz={(c) => setSelectedCourse(c)}
                   />
-                  <span>{opt}</span>
-                </label>
-              ))}
-            </div>
+                ))}
+              </div>
+            </InfiniteScroll>
+          )}
+        </div>
 
-            <div className="flex items-center justify-between pt-2">
-              <button
-                disabled={selectedOption === null || quizSubmitted}
-                onClick={() => setQuizSubmitted(true)}
-                className="px-4 py-2 rounded-lg bg-emerald-600 text-white font-semibold text-xs hover:bg-emerald-700 disabled:opacity-50"
-              >
-                Submit Answer
-              </button>
-
-              {quizSubmitted && (
-                <div className="flex items-center gap-2 text-xs font-bold">
-                  {selectedOption === 1 ? (
-                    <span className="text-green-600 flex items-center gap-1">
-                      <CheckCircle2 className="w-4 h-4" />
-                      Correct! Lists are mutable and indexed in Python.
-                    </span>
-                  ) : (
-                    <span className="text-red-600 flex items-center gap-1">
-                      <XCircle className="w-4 h-4" />
-                      Incorrect. Tuples and Strings are immutable; Sets cannot have duplicates. The correct answer is B. List.
-                    </span>
-                  )}
-                </div>
-              )}
-            </div>
-          </div>
-        )}
+        {/* Formative Quiz Drawer */}
+        <div className="lg:col-span-1">
+          <QuizDrawer />
+        </div>
       </div>
-    </div>
+    </PullToRefresh>
   );
 }

@@ -1,7 +1,9 @@
-from fastapi import APIRouter, Depends, UploadFile, File, Form, Request
+from fastapi import APIRouter, Depends, UploadFile, File, Form, Request, HTTPException
 from typing import Dict, Any, Optional
 from app.api.deps import get_current_user, get_access_service
 from app.modules.access.service import AccessService
+from app.services.document_processing.extractor import extract_text_and_pages
+from app.core.exceptions import ValidationError
 
 router = APIRouter()
 
@@ -15,18 +17,30 @@ async def upload_document(
     service: AccessService = Depends(get_access_service),
 ):
     content_bytes = await file.read()
-    text_content = content_bytes.decode("utf-8", errors="ignore")
+    filename = file.filename or "uploaded_doc.txt"
+    mime_type = file.content_type or "text/plain"
 
-    doc = service.process_document_upload(
+    try:
+        text_content, page_count = extract_text_and_pages(
+            file_bytes=content_bytes,
+            filename=filename,
+            mime_type=mime_type,
+        )
+    except ValidationError as ve:
+        raise HTTPException(status_code=400, detail=str(ve))
+
+    doc = await service.process_document_upload_with_embeddings(
         user_id=user["id"],
-        filename=file.filename or "uploaded_doc.txt",
+        filename=filename,
         content=text_content,
-        mime_type=file.content_type or "text/plain",
+        mime_type=mime_type,
+        page_count=page_count,
     )
 
     return {
         "success": True,
         "data": {
+            "id": doc["id"],
             "document_id": doc["id"],
             "filename": doc["filename"],
             "status": doc["status"],
@@ -82,3 +96,20 @@ async def delete_document(
         "data": {"deleted": success},
         "request_id": getattr(request.state, "request_id", "req-id"),
     }
+
+@router.post("/{document_id}/retry")
+async def retry_document_processing(
+    document_id: str,
+    request: Request,
+    user: Dict[str, Any] = Depends(get_current_user),
+    service: AccessService = Depends(get_access_service),
+):
+    try:
+        updated = await service.retry_document_processing(user["id"], document_id)
+        return {
+            "success": True,
+            "data": updated,
+            "request_id": getattr(request.state, "request_id", "req-id"),
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))

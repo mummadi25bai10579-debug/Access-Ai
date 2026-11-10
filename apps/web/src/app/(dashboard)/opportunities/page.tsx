@@ -1,206 +1,219 @@
 "use client";
 
-import React, { useState } from "react";
-import Link from "next/link";
-import {
-  Briefcase,
-  FileText,
-  Sparkles,
-  CheckCircle2,
-  AlertTriangle,
-  ArrowRight,
-  ExternalLink,
-  Target,
-} from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { AlertCircle } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { FilterDropdown } from "@/components/ui/FilterDropdown";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { OpportunityCardSkeleton } from "@/components/ui/Skeleton";
+import { PullToRefresh } from "@/components/ui/PullToRefresh";
+import { InfiniteScroll } from "@/components/ui/InfiniteScroll";
+import { OpportunityCard } from "@/features/opportunities/OpportunityCard";
+import { ResumeUploadDropzone } from "@/features/opportunities/ResumeUploadDropzone";
+import { SkillSummaryCard } from "@/features/opportunities/SkillSummaryCard";
+import { MatchScoreVisualizer } from "@/features/opportunities/MatchScoreVisualizer";
+import { ApiClient } from "@/lib/api/client";
+
+const PAGE_SIZE = 4;
 
 export default function OpportunitiesPage() {
-  const [resumeText, setResumeText] = useState(
-    "Lakshmi Narayana · Computer Science Undergrad (2026)\nSkills: Python, React, TypeScript, Tailwind CSS, Problem Solving, Git.\nProjects: Accessible Web Portal, Voice Document Reader."
-  );
-  const [parsedSkills, setParsedSkills] = useState(["Python", "React", "TypeScript", "Tailwind CSS", "Git"]);
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [userSkills, setUserSkills] = useState<string[]>([]);
+  const [appliedIds, setAppliedIds] = useState<Set<string>>(new Set());
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedType, setSelectedType] = useState("all");
+  const [activeBreakdownOpp, setActiveBreakdownOpp] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
 
-  const opportunities = [
-    {
-      id: "o1",
-      title: "AI & Full-Stack Engineering Internship",
-      org: "AssistiveTech Labs India",
-      type: "Internship",
-      location: "Remote (India)",
-      required: ["Python", "FastAPI", "React", "TypeScript", "Tailwind CSS"],
-      deadline: "25 Nov 2026",
-      score: 87,
-      formulaBreakdown: "E: 1.0 (40%) + R: 0.80 (28%) + P: 1.0 (15%) + F: 0.95 (4%)",
-      url: "https://example.com/careers/ai-intern",
-    },
-    {
-      id: "o2",
-      title: "Digital India AI Hackathon 2026",
-      org: "Ministry of Electronics & IT",
-      type: "Hackathon",
-      location: "Hybrid / New Delhi",
-      required: ["Machine Learning", "Python", "Speech Recognition", "OpenAPI"],
-      deadline: "05 Dec 2026",
-      score: 74,
-      formulaBreakdown: "E: 1.0 (40%) + R: 0.50 (18%) + P: 0.8 (12%) + F: 0.95 (4%)",
-      url: "https://innovateindia.mygov.in",
-    },
-    {
-      id: "o3",
-      title: "Junior Cloud & Backend Engineer",
-      org: "Bharat Cloud Solutions",
-      type: "Job",
-      location: "Hyderabad / Bengaluru",
-      required: ["Python", "PostgreSQL", "Docker", "REST APIs", "Git"],
-      deadline: "30 Nov 2026",
-      score: 68,
-      formulaBreakdown: "E: 1.0 (40%) + R: 0.40 (14%) + P: 0.8 (12%) + F: 0.95 (4%)",
-      url: "https://example.com/careers/junior-backend",
-    },
-  ];
+  const fetchUserData = useCallback(async () => {
+    if (!isSignedIn) return;
+    try {
+      const token = await getToken();
+      const profile = await ApiClient.getProfile(token);
+      if (profile?.skills && Array.isArray(profile.skills)) {
+        setUserSkills(profile.skills);
+      }
+      const myApps = await ApiClient.listMyApplications(token);
+      if (Array.isArray(myApps)) {
+        const idSet = new Set<string>(myApps.map((a: any) => a.opportunity_id));
+        setAppliedIds(idSet);
+      }
+    } catch {
+      // Ignored for unauthenticated users
+    }
+  }, [isSignedIn, getToken]);
+
+  const fetchOpportunities = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const typeParam = selectedType === "all" ? undefined : selectedType;
+      const data = await ApiClient.listOpportunities(typeParam);
+      if (Array.isArray(data)) {
+        setOpportunities(data);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to load opportunities");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedType]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      fetchUserData();
+    }
+  }, [isLoaded, fetchUserData]);
+
+  useEffect(() => {
+    fetchOpportunities();
+  }, [fetchOpportunities]);
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchQuery, selectedType]);
+
+  const filteredOpportunities = opportunities.filter((opp) => {
+    const title = (opp.title || "").toLowerCase();
+    const org = (opp.organization || "").toLowerCase();
+    const desc = (opp.description || "").toLowerCase();
+    const skills: string[] = opp.required_skills || opp.requiredSkills || [];
+    const query = searchQuery.toLowerCase();
+
+    const matchesSearch =
+      title.includes(query) ||
+      org.includes(query) ||
+      desc.includes(query) ||
+      skills.some((s) => s.toLowerCase().includes(query));
+
+    const oppType = (opp.opportunity_type || opp.type || "").toLowerCase();
+    const matchesType = selectedType === "all" || oppType === selectedType.toLowerCase();
+
+    return matchesSearch && matchesType;
+  });
+
+  const displayedOpportunities = filteredOpportunities.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredOpportunities.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredOpportunities.length));
+  };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div>
-        <div className="flex items-center gap-2">
-          <Briefcase className="w-6 h-6 text-amber-600" />
-          <h1 className="text-2xl font-extrabold tracking-tight">
-            OpportunityBridge — Career & Scholarship Matching
-          </h1>
-        </div>
-        <p className="text-sm opacity-80 mt-1">
-          Formula-driven ranking combining hard eligibility gates, skill relevance, user preferences, and source freshness.
-        </p>
-      </div>
+    <PullToRefresh onRefresh={fetchOpportunities} className="space-y-8">
+      <PageHeader
+        title="OpportunityBridge Career & Matching"
+        description="Structured resume skill analysis, qualification filtering, and multi-factor mathematical matching for internships, hackathons, and technical roles."
+        badge={<Badge variant="primary">Multi-Factor Matching Engine</Badge>}
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "OpportunityBridge" },
+        ]}
+      />
 
-      {/* Resume Ingestion Box */}
-      <div className="p-5 rounded-xl border border-border bg-card space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="font-bold text-sm flex items-center gap-2">
-            <FileText className="w-4 h-4 text-primary" />
-            <span>Active Resume & Extracted Skills</span>
-          </span>
-          <span className="text-xs px-2 py-0.5 rounded bg-accent border border-border font-medium">
-            Undergraduate · 2026
-          </span>
-        </div>
-
-        <textarea
-          value={resumeText}
-          onChange={(e) => setResumeText(e.target.value)}
-          rows={3}
-          className="w-full p-3 rounded-lg border border-border bg-background text-xs font-mono focus:ring-1 focus:ring-primary"
-          aria-label="Resume text"
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 flex-wrap">
+        <SearchInput
+          value={searchQuery}
+          onChangeValue={setSearchQuery}
+          placeholder="Search by title, company, skill (e.g. Python, React)..."
+          className="flex-1 max-w-md"
         />
 
-        <div className="flex flex-wrap items-center gap-1.5 pt-1">
-          <span className="text-xs font-bold mr-1 opacity-75">Parsed Skills:</span>
-          {parsedSkills.map((s, idx) => (
-            <span
-              key={idx}
-              className="px-2.5 py-0.5 rounded-full bg-primary/10 text-primary border border-primary/20 text-xs font-bold"
-            >
-              ✓ {s}
+        <div className="flex items-center gap-2.5">
+          <FilterDropdown
+            label="Opportunity Type"
+            selectedValue={selectedType}
+            onSelect={setSelectedType}
+            options={[
+              { label: "All Opportunities", value: "all" },
+              { label: "Internships", value: "internship" },
+              { label: "Hackathons", value: "hackathon" },
+              { label: "Scholarships", value: "scholarship" },
+              { label: "Full-Time Jobs", value: "job" },
+            ]}
+          />
+        </div>
+      </div>
+
+      {errorMessage && (
+        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
+
+      {/* Two Column Grid */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        {/* Left Column: Resume Dropzone & Skill Summary */}
+        <div className="lg:col-span-1 space-y-6">
+          <ResumeUploadDropzone />
+          <SkillSummaryCard skills={userSkills} />
+        </div>
+
+        {/* Right Column: Opportunities Feed */}
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between text-xs sm:text-sm text-muted">
+            <span className="font-semibold text-foreground">
+              Showing {displayedOpportunities.length} of {filteredOpportunities.length} Ranked Opportunities
             </span>
-          ))}
-        </div>
-      </div>
+            <span>Formula Fit Scoring</span>
+          </div>
 
-      {/* Matching Algorithm Formula Card */}
-      <div className="p-4 rounded-lg bg-accent/60 border border-border text-xs flex items-center justify-between gap-4">
-        <div className="flex items-center gap-2">
-          <Target className="w-4 h-4 text-primary" />
-          <span>
-            Scoring Formula: <strong>S = 0.40·E + 0.35·R + 0.15·P + 0.10·F</strong>
-          </span>
-        </div>
-        <span className="text-[11px] opacity-75 hidden md:inline">
-          Hard eligibility failure immediately clamps match score to 0.
-        </span>
-      </div>
-
-      {/* Opportunities List */}
-      <div className="space-y-4">
-        {opportunities.map((opp) => {
-          const matchedSkills = opp.required.filter((r) =>
-            parsedSkills.map((s) => s.toLowerCase()).includes(r.toLowerCase())
-          );
-          const missingSkills = opp.required.filter(
-            (r) => !parsedSkills.map((s) => s.toLowerCase()).includes(r.toLowerCase())
-          );
-
-          return (
-            <div key={opp.id} className="p-6 rounded-xl border border-border bg-card space-y-3">
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-base">{opp.title}</h3>
-                    <span className="text-[11px] px-2 py-0.5 rounded bg-accent border border-border font-semibold">
-                      {opp.type}
-                    </span>
-                  </div>
-                  <p className="text-xs opacity-75">{opp.org} · {opp.location}</p>
-                </div>
-
-                <div className="text-right">
-                  <div className="text-2xl font-black text-green-600 dark:text-green-400">
-                    {opp.score}%
-                  </div>
-                  <p className="text-[10px] uppercase font-bold opacity-75">Calibrated Fit</p>
-                </div>
-              </div>
-
-              {/* Skills Breakdown */}
-              <div className="pt-2 flex flex-wrap items-center gap-2 text-xs">
-                <span className="font-semibold opacity-75">Skills:</span>
-                {matchedSkills.map((s, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 rounded bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300 font-medium"
-                  >
-                    ✓ {s}
-                  </span>
-                ))}
-                {missingSkills.map((s, i) => (
-                  <span
-                    key={i}
-                    className="px-2 py-0.5 rounded bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 font-medium flex items-center gap-1"
-                  >
-                    <span>+ Missing: {s}</span>
-                  </span>
-                ))}
-              </div>
-
-              {/* Formula & Action footer */}
-              <div className="pt-3 border-t border-border flex flex-wrap items-center justify-between gap-2 text-xs">
-                <span className="font-mono text-[11px] opacity-70">
-                  Weights: {opp.formulaBreakdown}
-                </span>
-
-                <div className="flex items-center gap-3">
-                  {missingSkills.length > 0 && (
-                    <Link
-                      href="/education"
-                      className="text-primary font-semibold hover:underline flex items-center gap-1"
-                    >
-                      <span>Study {missingSkills[0]} in EduBridge</span>
-                      <ArrowRight className="w-3.5 h-3.5" />
-                    </Link>
-                  )}
-                  <a
-                    href={opp.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="px-3 py-1.5 rounded-lg bg-primary text-primary-foreground font-semibold flex items-center gap-1.5 focus-visible:ring-2"
-                  >
-                    <span>Apply on Portal</span>
-                    <ExternalLink className="w-3.5 h-3.5" />
-                  </a>
-                </div>
-              </div>
+          {isLoading ? (
+            <div className="grid gap-4">
+              <OpportunityCardSkeleton count={4} />
             </div>
-          );
-        })}
+          ) : filteredOpportunities.length === 0 ? (
+            <EmptyState
+              title="No Opportunities Found"
+              description={
+                searchQuery || selectedType !== "all"
+                  ? "No listings match your search criteria. Try removing filters or searching for foundational skills like Python or React."
+                  : "No opportunities are currently published in the database."
+              }
+              actionLabel="Reset Search & Filters"
+              onAction={() => {
+                setSearchQuery("");
+                setSelectedType("all");
+              }}
+            />
+          ) : (
+            <InfiniteScroll
+              hasMore={hasMore}
+              isLoading={false}
+              onLoadMore={handleLoadMore}
+              endMessage="All career opportunities loaded."
+            >
+              <div className="grid gap-4">
+                {displayedOpportunities.map((opp, idx) => (
+                  <OpportunityCard
+                    key={opp.id || `opp-${idx}`}
+                    opportunity={{
+                      ...opp,
+                      has_applied: appliedIds.has(opp.id),
+                    }}
+                    onSelectForBreakdown={(o) => setActiveBreakdownOpp(o)}
+                  />
+                ))}
+              </div>
+            </InfiniteScroll>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Score Breakdown Modal */}
+      <MatchScoreVisualizer
+        opportunity={activeBreakdownOpp}
+        onClose={() => setActiveBreakdownOpp(null)}
+      />
+    </PullToRefresh>
   );
 }

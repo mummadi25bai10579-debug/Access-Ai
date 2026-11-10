@@ -1,232 +1,386 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useState, useEffect, useCallback } from "react";
 import Link from "next/link";
+import { useAuth, useUser } from "@clerk/nextjs";
 import {
   FileSearch,
   GraduationCap,
   Landmark,
   Briefcase,
-  CheckCircle2,
-  AlertCircle,
-  Calendar,
-  ExternalLink,
   ArrowRight,
   Sparkles,
+  FolderOpen,
+  ShieldCheck,
+  Award,
+  Inbox,
 } from "lucide-react";
+import { StatCard } from "@/components/ui/StatCard";
+import { Card, CardHeader, CardContent } from "@/components/ui/Card";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { DashboardSkeleton } from "@/components/ui/Skeleton";
+import { PullToRefresh } from "@/components/ui/PullToRefresh";
+import { ModuleCards } from "@/features/dashboard/ModuleCards";
+import { QuickActions } from "@/features/dashboard/QuickActions";
+import { UpcomingDeadlines } from "@/features/dashboard/UpcomingDeadlines";
+import { RecentActivity } from "@/features/dashboard/RecentActivity";
+import { ApiClient } from "@/lib/api/client";
+import { formatDate } from "@/lib/utils/format";
 
 export default function DashboardPage() {
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const { user } = useUser();
+
+  const [statsData, setStatsData] = useState<any>({
+    full_name: "Citizen",
+    state_code: "AP",
+    annual_family_income: 0,
+    education_level: "undergraduate",
+    category: "General",
+    stats: {
+      uploaded_documents_count: 0,
+      learning_progress_percent: 0,
+      matched_opportunities_count: 0,
+      matched_schemes_count: 0,
+      eligible_schemes_count: 0,
+      applications_count: 0,
+      unread_notifications_count: 0,
+    },
+  });
+
+  const [opportunities, setOpportunities] = useState<any[]>([]);
+  const [documents, setDocuments] = useState<any[]>([]);
+  const [applications, setApplications] = useState<any[]>([]);
+  const [isLoading, setIsLoading] = useState(true);
+
+  const loadDashboard = useCallback(async () => {
+    setIsLoading(true);
+    try {
+      const token = isSignedIn ? await getToken() : null;
+
+      // Fetch parallel stats, opportunities, documents, and applications from backend
+      const [statsRes, oppsRes, docsRes, appsRes] = await Promise.allSettled([
+        ApiClient.getDashboardStats(token),
+        ApiClient.listOpportunities(),
+        token ? ApiClient.listDocuments(token) : Promise.resolve([]),
+        token ? ApiClient.listMyApplications(token) : Promise.resolve([]),
+      ]);
+
+      if (statsRes.status === "fulfilled" && statsRes.value) {
+        setStatsData(statsRes.value);
+      }
+      if (oppsRes.status === "fulfilled" && Array.isArray(oppsRes.value)) {
+        setOpportunities(oppsRes.value);
+      }
+      if (docsRes.status === "fulfilled" && Array.isArray(docsRes.value)) {
+        setDocuments(docsRes.value);
+      }
+      if (appsRes.status === "fulfilled" && Array.isArray(appsRes.value)) {
+        setApplications(appsRes.value);
+      }
+    } catch {
+      // Handled silently
+    } finally {
+      setIsLoading(false);
+    }
+  }, [isSignedIn, getToken]);
+
+  useEffect(() => {
+    loadDashboard();
+  }, [loadDashboard]);
+
+  const topOpportunities = opportunities.slice(0, 2);
+  const recentDocs = documents.slice(0, 2);
+  const displayName = user?.fullName || statsData?.full_name || "Citizen";
+
+  // Derive real-time upcoming deadlines from actual active opportunities in database
+  const deadlines = opportunities
+    .filter((opp) => opp.deadline)
+    .map((opp) => {
+      const d = new Date(opp.deadline);
+      const diffMs = d.getTime() - Date.now();
+      const daysLeft = Math.max(0, Math.ceil(diffMs / (1000 * 60 * 60 * 24)));
+      return {
+        id: opp.id,
+        title: opp.title,
+        category: `${opp.organization} · ${(opp.opportunity_type || "Career").toUpperCase()}`,
+        date: formatDate(opp.deadline),
+        daysLeft,
+        isUrgent: daysLeft <= 7,
+      };
+    })
+    .sort((a, b) => a.daysLeft - b.daysLeft)
+    .slice(0, 4);
+
+  // Derive real-time audit trail from user's actual documents and applications
+  const activities = [
+    ...documents.slice(0, 3).map((doc) => ({
+      id: `doc-${doc.id}`,
+      title: `Document Uploaded: ${doc.filename}`,
+      description: `Indexed ${doc.page_count || 1} pages with status ${(doc.status || "uploaded").toUpperCase()}. Grounded Q&A is active.`,
+      timestamp: formatDate(doc.created_at),
+    })),
+    ...applications.slice(0, 2).map((app) => ({
+      id: `app-${app.id}`,
+      title: `Opportunity Application Submitted`,
+      description: `Application status: ${(app.status || "submitted").toUpperCase()}`,
+      timestamp: formatDate(app.created_at),
+    })),
+  ];
+
   return (
-    <div className="space-y-8 max-w-6xl mx-auto">
-      {/* Welcome Banner */}
-      <section className="p-6 rounded-2xl bg-gradient-to-r from-sky-900 to-indigo-950 text-white space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-4">
-          <div>
-            <span className="text-xs font-semibold tracking-wider uppercase opacity-80">
-              Unified Access Dashboard
-            </span>
-            <h1 className="text-2xl md:text-3xl font-extrabold">
-              Namaste, Lakshmi Narayana
+    <PullToRefresh onRefresh={loadDashboard} className="space-y-8">
+      {isLoading ? (
+        <DashboardSkeleton />
+      ) : (
+        <>
+          {/* Hero Welcome Card */}
+          <section className="relative overflow-hidden rounded-2xl bg-card border border-border text-foreground p-6 sm:p-8 shadow-sm">
+        <div className="flex flex-col md:flex-row md:items-center justify-between gap-6">
+          <div className="space-y-2.5 max-w-2xl">
+            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-card border border-primary/40 text-xs font-semibold uppercase tracking-wider text-primary">
+              <Sparkles className="w-3.5 h-3.5 text-primary" />
+              <span>Universal Access & Opportunity Platform</span>
+            </div>
+
+            <h1 className="text-2xl sm:text-3xl font-extrabold tracking-tight text-foreground">
+              Namaste, {displayName}
             </h1>
-            <p className="text-sm opacity-90 max-w-2xl mt-1">
-              Your profile is matched with 2 state/central government schemes, 3 technical opportunities,
-              and your active Python learning progress.
+
+            <p className="text-sm sm:text-base text-muted leading-relaxed">
+              Your profile is connected to <strong className="text-foreground font-semibold">{statsData.stats.eligible_schemes_count} verified welfare schemes</strong>,{" "}
+              <strong className="text-foreground font-semibold">{statsData.stats.matched_opportunities_count} career opportunities</strong>, and active study pathways.
             </p>
+
+            <div className="pt-2 flex flex-wrap items-center gap-3 text-xs sm:text-sm text-muted">
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-card border border-border font-medium">
+                <ShieldCheck className="w-4 h-4 text-emerald-500" />
+                <span>{statsData.state_code || "AP"} Domicile</span>
+              </span>
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-card border border-border font-medium">
+                <Award className="w-4 h-4 text-sky-500" />
+                <span>Category: {statsData.category || "General"}</span>
+              </span>
+              <span className="flex items-center gap-1.5 px-3 py-1 rounded-md bg-card border border-border font-medium">
+                <GraduationCap className="w-4 h-4 text-purple-500" />
+                <span>{statsData.education_level || "Undergraduate"}</span>
+              </span>
+            </div>
           </div>
-          <div className="flex gap-2">
-            <Link
-              href="/access"
-              className="px-4 py-2 rounded-lg bg-white text-sky-950 font-bold text-sm hover:bg-slate-100 transition-colors flex items-center gap-1.5 focus-visible:ring-2"
-            >
-              <FileSearch className="w-4 h-4" />
-              <span>Ask Document</span>
+
+          <div className="flex flex-col sm:flex-row md:flex-col gap-3 shrink-0">
+            <Link href="/access">
+              <Button
+                variant="primary"
+                size="md"
+                leftIcon={<FileSearch className="w-4 h-4" />}
+                className="w-full sm:w-auto"
+              >
+                Ask Document Assistant
+              </Button>
+            </Link>
+            <Link href="/schemes">
+              <Button
+                variant="secondary"
+                size="md"
+                leftIcon={<Landmark className="w-4 h-4" />}
+                className="w-full sm:w-auto"
+              >
+                View Eligible Schemes
+              </Button>
             </Link>
           </div>
         </div>
       </section>
 
-      {/* Grid of Key Stats & Highlights */}
-      <div className="grid md:grid-cols-4 gap-4">
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between text-xs opacity-75 font-medium">
-            <span>Matched Schemes</span>
-            <Landmark className="w-4 h-4 text-purple-500" />
-          </div>
-          <p className="text-2xl font-bold mt-2">2 Verified</p>
-          <p className="text-xs text-green-600 font-semibold mt-1 flex items-center gap-1">
-            <CheckCircle2 className="w-3.5 h-3.5" />
-            <span>Eligible for AP Vidya Deevena</span>
-          </p>
-        </div>
+      {/* Top Stat Metrics */}
+      <section aria-label="Key Performance Indicators" className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        <StatCard
+          label="Eligible Schemes"
+          value={isLoading ? "..." : `${statsData.stats.eligible_schemes_count} Active`}
+          subtitle="Government welfare schemes"
+          icon={<Landmark className="w-5 h-5 text-primary" />}
+        />
+        <StatCard
+          label="Opportunity Matches"
+          value={isLoading ? "..." : `${statsData.stats.matched_opportunities_count} Listed`}
+          subtitle="Jobs, internships & events"
+          icon={<Briefcase className="w-5 h-5 text-emerald-500" />}
+        />
+        <StatCard
+          label="EduBridge Progress"
+          value={isLoading ? "..." : `${Math.round(statsData.stats.learning_progress_percent)}%`}
+          subtitle="Curriculum mastery"
+          icon={<GraduationCap className="w-5 h-5 text-purple-500" />}
+        />
+        <StatCard
+          label="Ingested Documents"
+          value={isLoading ? "..." : `${statsData.stats.uploaded_documents_count} Files`}
+          subtitle="Indexed in database"
+          icon={<FolderOpen className="w-5 h-5 text-sky-500" />}
+        />
+      </section>
 
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between text-xs opacity-75 font-medium">
-            <span>Opportunities</span>
-            <Briefcase className="w-4 h-4 text-amber-500" />
-          </div>
-          <p className="text-2xl font-bold mt-2">3 Recommended</p>
-          <p className="text-xs text-amber-600 font-semibold mt-1">
-            Top fit: 87% Match Score
-          </p>
-        </div>
+      {/* Four Core Module Navigation Cards */}
+      <section aria-label="AccessAI Domain Modules">
+        <ModuleCards stats={statsData?.stats} />
+      </section>
 
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between text-xs opacity-75 font-medium">
-            <span>EduBridge Progress</span>
-            <GraduationCap className="w-4 h-4 text-emerald-500" />
-          </div>
-          <p className="text-2xl font-bold mt-2">45% Mastery</p>
-          <p className="text-xs opacity-75 mt-1">Python Conditionals & Loops</p>
-        </div>
+      {/* Quick Action Shortcuts */}
+      <section aria-label="Quick Action Shortcuts">
+        <QuickActions />
+      </section>
 
-        <div className="p-4 rounded-xl border border-border bg-card">
-          <div className="flex items-center justify-between text-xs opacity-75 font-medium">
-            <span>Upcoming Deadlines</span>
-            <Calendar className="w-4 h-4 text-rose-500" />
-          </div>
-          <p className="text-2xl font-bold mt-2">Nov 30, 2026</p>
-          <p className="text-xs text-rose-600 font-semibold mt-1">NSP Minority Scholarship</p>
-        </div>
-      </div>
-
-      {/* Two Column Layout: Schemes & Opportunities */}
+      {/* Split Section: Top Recommended Opportunities & Recent Ingested Documents */}
       <div className="grid md:grid-cols-2 gap-6">
-        {/* Matched Schemes */}
-        <section className="p-6 rounded-xl border border-border bg-card space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Landmark className="w-5 h-5 text-purple-600" />
-              <h2 className="text-lg font-bold">Verified Government Schemes</h2>
-            </div>
-            <Link
-              href="/schemes"
-              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
-            >
-              <span>View All</span>
-              <ArrowRight className="w-3.5 h-3.5" />
-            </Link>
+        {/* Top Opportunities Card */}
+        <Card className="flex flex-col justify-between">
+          <div>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <Briefcase className="w-4 h-4 text-primary" />
+                <h2 className="font-bold text-base sm:text-lg text-foreground">
+                  Featured Career Opportunities
+                </h2>
+              </div>
+              <Badge variant="outline">Verified Postings</Badge>
+            </CardHeader>
+
+            <CardContent className="space-y-3.5">
+              {topOpportunities.length === 0 ? (
+                <div className="py-8 text-center text-muted space-y-1">
+                  <Inbox className="w-6 h-6 mx-auto text-muted/60" />
+                  <p className="text-xs sm:text-sm">No opportunity postings currently available.</p>
+                </div>
+              ) : (
+                topOpportunities.map((opp, idx) => (
+                  <div
+                    key={opp.id || `opp-${idx}`}
+                    className="p-4 rounded-xl border border-border bg-card hover:border-primary/50 transition-colors space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-sm sm:text-base text-foreground hover:text-primary transition-colors">
+                          <Link href="/opportunities">{opp.title}</Link>
+                        </h3>
+                        <p className="text-xs sm:text-sm text-muted">{opp.organization} · {opp.location}</p>
+                      </div>
+                      <Badge variant="primary" className="font-mono text-xs shrink-0 uppercase">
+                        {opp.opportunity_type}
+                      </Badge>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-muted leading-relaxed line-clamp-2">
+                      {opp.description}
+                    </p>
+
+                    <div className="flex items-center justify-between text-xs pt-2.5 border-t border-border">
+                      <span className="font-semibold text-emerald-500">
+                        {opp.official_url ? "Verified Posting" : "Internal"}
+                      </span>
+                      <span className="text-muted text-xs">
+                        Deadline: {formatDate(opp.deadline)}
+                      </span>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
           </div>
 
-          <div className="space-y-3">
-            <div className="p-4 rounded-lg border border-green-200 dark:border-green-900 bg-green-50/50 dark:bg-green-950/20 space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-sm">Jagananna Vidya Deevena (RTF)</h3>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-green-200 dark:bg-green-800 text-green-900 dark:text-green-100 font-bold">
-                  Eligible
-                </span>
-              </div>
-              <p className="text-xs opacity-80 leading-relaxed">
-                Full college fee reimbursement for undergraduate and polytechnic students in Andhra Pradesh.
-              </p>
-              <div className="text-xs flex items-center justify-between pt-1">
-                <span className="opacity-70">Source: jnanabhumi.ap.gov.in</span>
-                <Link
-                  href="/schemes"
-                  className="font-semibold text-primary hover:underline"
-                >
-                  View Checklist →
-                </Link>
-              </div>
-            </div>
-
-            <div className="p-4 rounded-lg border border-border bg-background space-y-2">
-              <div className="flex items-center justify-between">
-                <h3 className="font-bold text-sm">Post Matric Scholarships for Minorities</h3>
-                <span className="text-xs px-2 py-0.5 rounded-full bg-yellow-100 dark:bg-yellow-900/50 text-yellow-800 dark:text-yellow-200 font-bold">
-                  Potentially Eligible
-                </span>
-              </div>
-              <p className="text-xs opacity-80 leading-relaxed">
-                Central government financial assistance for students with family income under ₹2,00,000.
-              </p>
-              <div className="text-xs flex items-center justify-between pt-1">
-                <span className="opacity-70">Deadline: 30 Nov 2026</span>
-                <Link
-                  href="/schemes"
-                  className="font-semibold text-primary hover:underline"
-                >
-                  Check Criteria →
-                </Link>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Opportunity Feed */}
-        <section className="p-6 rounded-xl border border-border bg-card space-y-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <Briefcase className="w-5 h-5 text-amber-600" />
-              <h2 className="text-lg font-bold">Personalized Opportunity Feed</h2>
-            </div>
+          <div className="p-4 border-t border-border">
             <Link
               href="/opportunities"
-              className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+              className="text-xs sm:text-sm font-semibold text-primary hover:underline flex items-center justify-center gap-1"
             >
-              <span>Explore All</span>
+              <span>Explore all opportunities</span>
               <ArrowRight className="w-3.5 h-3.5" />
             </Link>
           </div>
+        </Card>
 
-          <div className="space-y-3">
-            <div className="p-4 rounded-lg border border-border bg-background space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-sm">AI & Full-Stack Engineering Internship</h3>
-                  <p className="text-xs opacity-75">AssistiveTech Labs India · Remote</p>
-                </div>
-                <div className="text-right">
-                  <span className="text-sm font-extrabold text-green-600">87%</span>
-                  <p className="text-[10px] opacity-70">Match Score</p>
-                </div>
+        {/* Recent Ingested Documents Card */}
+        <Card className="flex flex-col justify-between">
+          <div>
+            <CardHeader>
+              <div className="flex items-center gap-2">
+                <FolderOpen className="w-4 h-4 text-primary" />
+                <h2 className="font-bold text-base sm:text-lg text-foreground">
+                  Recent Ingested Documents
+                </h2>
               </div>
-              <div className="flex flex-wrap gap-1 text-[11px]">
-                <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300 font-medium">
-                  ✓ Python
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-green-100 dark:bg-green-950 text-green-800 dark:text-green-300 font-medium">
-                  ✓ React
-                </span>
-                <span className="px-1.5 py-0.5 rounded bg-red-100 dark:bg-red-950 text-red-800 dark:text-red-300 font-medium">
-                  + FastAPI Gap
-                </span>
-              </div>
-              <div className="text-xs flex items-center justify-between pt-1">
-                <span className="opacity-70">Deadline: 25 Nov 2026</span>
-                <Link
-                  href="/education"
-                  className="font-semibold text-primary hover:underline"
-                >
-                  Bridge Skill Gap in EduBridge →
-                </Link>
-              </div>
-            </div>
+              <Badge variant="outline">Indexed Context</Badge>
+            </CardHeader>
 
-            <div className="p-4 rounded-lg border border-border bg-background space-y-2">
-              <div className="flex items-center justify-between">
-                <div>
-                  <h3 className="font-bold text-sm">Digital India AI Hackathon 2026</h3>
-                  <p className="text-xs opacity-75">Ministry of Electronics & IT · Hybrid</p>
+            <CardContent className="space-y-3.5">
+              {recentDocs.length === 0 ? (
+                <div className="py-8 text-center text-muted space-y-1">
+                  <Inbox className="w-6 h-6 mx-auto text-muted/60" />
+                  <p className="text-xs sm:text-sm">No documents uploaded yet.</p>
+                  <p className="text-xs text-muted">Upload circulars or marksheets to enable grounded AI Q&A.</p>
                 </div>
-                <div className="text-right">
-                  <span className="text-sm font-extrabold text-green-600">79%</span>
-                  <p className="text-[10px] opacity-70">Match Score</p>
-                </div>
-              </div>
-              <p className="text-xs opacity-80">Build voice-enabled assistive applications for public services.</p>
-              <div className="text-xs flex items-center justify-between pt-1">
-                <span className="opacity-70">Deadline: 05 Dec 2026</span>
-                <Link
-                  href="/opportunities"
-                  className="font-semibold text-primary hover:underline"
-                >
-                  View Details →
-                </Link>
-              </div>
-            </div>
+              ) : (
+                recentDocs.map((doc, idx) => (
+                  <div
+                    key={doc.id || doc.document_id || `doc-${idx}`}
+                    className="p-4 rounded-xl border border-border bg-card hover:border-primary/50 transition-colors space-y-2.5"
+                  >
+                    <div className="flex items-start justify-between gap-2">
+                      <div>
+                        <h3 className="font-bold text-sm sm:text-base text-foreground hover:text-primary transition-colors">
+                          <Link href="/access">{doc.filename}</Link>
+                        </h3>
+                        <p className="text-xs sm:text-sm text-muted">
+                          {doc.page_count || 1} pages · Status: {(doc.status || "uploaded").toUpperCase()}
+                        </p>
+                      </div>
+                      <Badge variant="outline" className="text-xs shrink-0 font-mono">
+                        {(doc.detected_language || "en").toUpperCase()}
+                      </Badge>
+                    </div>
+
+                    <p className="text-xs sm:text-sm text-muted leading-relaxed line-clamp-2">
+                      {doc.extracted_text ? doc.extracted_text.slice(0, 160) + "..." : "Text extracted and indexed for semantic Q&A."}
+                    </p>
+
+                    <div className="flex items-center justify-between text-xs pt-2.5 border-t border-border">
+                      <span className="text-muted text-xs">
+                        Added: {formatDate(doc.created_at)}
+                      </span>
+                      <Link
+                        href="/access"
+                        className="text-xs font-semibold text-primary hover:underline flex items-center gap-1"
+                      >
+                        <span>Query Assistant</span>
+                        <ArrowRight className="w-3 h-3" />
+                      </Link>
+                    </div>
+                  </div>
+                ))
+              )}
+            </CardContent>
           </div>
-        </section>
+
+          <div className="p-4 border-t border-border">
+            <Link
+              href="/documents"
+              className="text-xs sm:text-sm font-semibold text-primary hover:underline flex items-center justify-center gap-1"
+            >
+              <span>Manage document repositories</span>
+              <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          </div>
+        </Card>
       </div>
-    </div>
+
+      {/* Deadlines and Activity Audit Trail */}
+      <div className="grid md:grid-cols-2 gap-6">
+        <UpcomingDeadlines deadlines={deadlines} />
+        <RecentActivity activities={activities} />
+      </div>
+    </>
+    )}
+  </PullToRefresh>
   );
 }

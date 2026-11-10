@@ -10,10 +10,14 @@ from app.api.deps import (
     get_education_service,
     get_scheme_service,
     get_opportunity_service,
+    set_orchestrator,
 )
+from app.intelligence.providers.mock_provider import MockAIProvider
+from app.intelligence.orchestrator.orchestrator import AIOrchestrator
 
 class TestApiServicesIntegration(unittest.TestCase):
     def setUp(self):
+        set_orchestrator(AIOrchestrator(MockAIProvider()))
         self.access = get_access_service()
         self.education = get_education_service()
         self.schemes = get_scheme_service()

@@ -1,4 +1,4 @@
-from typing import Dict, Any, Generator, Callable
+from typing import Dict, Any, Generator, Callable, Optional
 
 try:
     from fastapi import Header, Depends
@@ -21,45 +21,82 @@ from app.modules.schemes.repository import SchemeRepository
 from app.modules.schemes.service import SchemeService
 from app.modules.opportunities.repository import OpportunityRepository
 from app.modules.opportunities.service import OpportunityService
+from app.database.session import get_db
 
-# Singletons / cached instances
+# Singletons / cached fallback instances for unit tests
 _document_repo = DocumentRepository()
-_ai_provider = get_ai_provider()
-_orchestrator = AIOrchestrator(_ai_provider)
-_access_service = AccessService(_orchestrator, _document_repo)
+_orchestrator: Optional[AIOrchestrator] = None
+
+def get_orchestrator() -> AIOrchestrator:
+    global _orchestrator
+    if _orchestrator is None:
+        provider = get_ai_provider()
+        _orchestrator = AIOrchestrator(provider)
+    return _orchestrator
+
+def set_orchestrator(orch: AIOrchestrator) -> None:
+    global _orchestrator
+    _orchestrator = orch
 
 _education_repo = EducationRepository()
-_education_service = EducationService(_orchestrator, _education_repo)
-
 _scheme_repo = SchemeRepository()
-_scheme_service = SchemeService(_scheme_repo)
-
 _opportunity_repo = OpportunityRepository()
-_opportunity_service = OpportunityService(_opportunity_repo)
+
 
 async def get_current_user(authorization: str = Header(None)) -> Dict[str, Any]:
     """
-    Extracts and verifies Supabase JWT token from Authorization header.
-    In development, falls back to a default test user if unauthenticated.
+    FastAPI Dependency: Extracts and verifies Clerk session JWT token from Authorization header.
+    Enforces signature verification, algorithm RS256, expiration check, and extracts Clerk user ID ('sub').
+    Rejects missing or invalid tokens with HTTP 401 UnauthorizedError.
     """
     if not authorization:
-        # Fallback for dev ease
-        return {
-            "sub": "00000000-0000-0000-0000-000000000001",
-            "id": "00000000-0000-0000-0000-000000000001",
-            "email": "demo.student@accessai.local",
-            "role": "authenticated",
-        }
+        raise UnauthorizedError("Authentication required: Missing Authorization header.")
     return verify_jwt_token(authorization)
 
-def get_access_service() -> AccessService:
-    return _access_service
 
-def get_education_service() -> EducationService:
-    return _education_service
+def get_document_repo(db: Any = Depends(get_db)) -> DocumentRepository:
+    if db is not None:
+        return DocumentRepository(db)
+    return _document_repo
 
-def get_scheme_service() -> SchemeService:
-    return _scheme_service
 
-def get_opportunity_service() -> OpportunityService:
-    return _opportunity_service
+def get_access_service(repo: Any = Depends(get_document_repo)) -> AccessService:
+    if not isinstance(repo, DocumentRepository):
+        repo = _document_repo
+    return AccessService(get_orchestrator(), repo)
+
+
+def get_education_repo(db: Any = Depends(get_db)) -> EducationRepository:
+    if db is not None:
+        return EducationRepository(db)
+    return _education_repo
+
+
+def get_education_service(repo: Any = Depends(get_education_repo)) -> EducationService:
+    if not isinstance(repo, EducationRepository):
+        repo = _education_repo
+    return EducationService(get_orchestrator(), repo)
+
+
+def get_scheme_repo(db: Any = Depends(get_db)) -> SchemeRepository:
+    if db is not None:
+        return SchemeRepository(db)
+    return _scheme_repo
+
+
+def get_scheme_service(repo: Any = Depends(get_scheme_repo)) -> SchemeService:
+    if not isinstance(repo, SchemeRepository):
+        repo = _scheme_repo
+    return SchemeService(repo)
+
+
+def get_opportunity_repo(db: Any = Depends(get_db)) -> OpportunityRepository:
+    if db is not None:
+        return OpportunityRepository(db)
+    return _opportunity_repo
+
+
+def get_opportunity_service(repo: Any = Depends(get_opportunity_repo)) -> OpportunityService:
+    if not isinstance(repo, OpportunityRepository):
+        repo = _opportunity_repo
+    return OpportunityService(repo)

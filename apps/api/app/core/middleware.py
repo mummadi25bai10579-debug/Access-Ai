@@ -5,6 +5,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import Response, JSONResponse
 from app.core.logging import get_logger
+from app.core.exceptions import AccessAIException
 
 logger = get_logger(__name__)
 
@@ -25,6 +26,28 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
             response.headers["X-Frame-Options"] = "DENY"
             response.headers["Referrer-Policy"] = "strict-origin-when-cross-origin"
             return response
+        except AccessAIException as aie:
+            duration_ms = round((time.time() - start_time) * 1000, 2)
+            logger.warning(f"Domain error processing {request.method} {request.url.path}: [{aie.code}] {aie.message}")
+            return JSONResponse(
+                status_code=aie.status_code,
+                content={
+                    "success": False,
+                    "error": {
+                        "code": aie.code,
+                        "message": aie.message,
+                        "details": aie.details,
+                    },
+                    "request_id": request_id,
+                },
+                headers={
+                    "X-Request-ID": request_id,
+                    "X-Response-Time-Ms": str(duration_ms),
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Frame-Options": "DENY",
+                    "Referrer-Policy": "strict-origin-when-cross-origin",
+                },
+            )
         except Exception as exc:
             duration_ms = round((time.time() - start_time) * 1000, 2)
             logger.error(f"Unhandled error processing {request.method} {request.url.path}: {exc}")
@@ -41,5 +64,8 @@ class RequestContextMiddleware(BaseHTTPMiddleware):
                 headers={
                     "X-Request-ID": request_id,
                     "X-Response-Time-Ms": str(duration_ms),
+                    "X-Content-Type-Options": "nosniff",
+                    "X-Frame-Options": "DENY",
+                    "Referrer-Policy": "strict-origin-when-cross-origin",
                 },
             )

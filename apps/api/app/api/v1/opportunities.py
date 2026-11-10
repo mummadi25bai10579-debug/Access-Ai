@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, Request, Query
 from pydantic import BaseModel, Field
 from typing import Dict, Any, Optional, List
-from app.api.deps import get_opportunity_service
+from app.api.deps import get_current_user, get_opportunity_service
 from app.modules.opportunities.service import OpportunityService
 
 router = APIRouter()
@@ -17,6 +17,9 @@ class SkillGapRequest(BaseModel):
     opportunity_id: str
     user_skills: List[str]
 
+class ApplyOpportunityRequest(BaseModel):
+    notes: Optional[str] = None
+
 @router.get("")
 async def list_opportunities(
     request: Request,
@@ -30,6 +33,19 @@ async def list_opportunities(
         "request_id": getattr(request.state, "request_id", "req-id"),
     }
 
+@router.get("/applications/me")
+async def list_my_applications(
+    request: Request,
+    user: Dict[str, Any] = Depends(get_current_user),
+    service: OpportunityService = Depends(get_opportunity_service),
+):
+    apps = service.repository.list_user_applications(user["id"])
+    return {
+        "success": True,
+        "data": apps,
+        "request_id": getattr(request.state, "request_id", "req-id"),
+    }
+
 @router.get("/{opportunity_id}")
 async def get_opportunity(
     opportunity_id: str,
@@ -40,6 +56,25 @@ async def get_opportunity(
     return {
         "success": True,
         "data": opp,
+        "request_id": getattr(request.state, "request_id", "req-id"),
+    }
+
+@router.post("/{opportunity_id}/apply")
+async def apply_to_opportunity(
+    opportunity_id: str,
+    body: ApplyOpportunityRequest,
+    request: Request,
+    user: Dict[str, Any] = Depends(get_current_user),
+    service: OpportunityService = Depends(get_opportunity_service),
+):
+    app = service.repository.apply(
+        user_id=user["id"],
+        opportunity_id=opportunity_id,
+        notes=body.notes,
+    )
+    return {
+        "success": True,
+        "data": app,
         "request_id": getattr(request.state, "request_id", "req-id"),
     }
 

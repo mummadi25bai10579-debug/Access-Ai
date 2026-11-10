@@ -1,252 +1,245 @@
 "use client";
 
-import React, { useState } from "react";
-import {
-  Landmark,
-  CheckCircle2,
-  XCircle,
-  AlertCircle,
-  ExternalLink,
-  ShieldCheck,
-  FileCheck,
-  Filter,
-} from "lucide-react";
+import React, { useState, useEffect, useCallback } from "react";
+import { useAuth } from "@clerk/nextjs";
+import { AlertCircle } from "lucide-react";
+import { PageHeader } from "@/components/ui/PageHeader";
+import { Badge } from "@/components/ui/Badge";
+import { SearchInput } from "@/components/ui/SearchInput";
+import { FilterDropdown } from "@/components/ui/FilterDropdown";
+import { EmptyState } from "@/components/ui/EmptyState";
+import { SchemeCardSkeleton } from "@/components/ui/Skeleton";
+import { PullToRefresh } from "@/components/ui/PullToRefresh";
+import { InfiniteScroll } from "@/components/ui/InfiniteScroll";
+import { SchemeCard } from "@/features/schemes/SchemeCard";
+import { EligibilityForm } from "@/features/schemes/EligibilityForm";
+import { DocumentChecklistModal } from "@/features/schemes/DocumentChecklistModal";
+import { ApiClient } from "@/lib/api/client";
+
+const DEFAULT_PROFILE = {
+  stateCode: "AP",
+  annualFamilyIncome: 180000,
+  educationLevel: "undergraduate",
+  gender: "female",
+  category: "OBC",
+};
+
+const PAGE_SIZE = 4;
 
 export default function SchemesPage() {
-  const [userProfile, setUserProfile] = useState({
-    state_code: "AP",
-    annual_family_income: 180000,
-    education_level: "undergraduate",
-    gender: "female",
-    category: "BC-A",
+  const { isSignedIn, isLoaded, getToken } = useAuth();
+  const [schemes, setSchemes] = useState<any[]>([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [selectedCategory, setSelectedCategory] = useState("all");
+  const [selectedState, setSelectedState] = useState("all");
+  const [activeChecklistScheme, setActiveChecklistScheme] = useState<any | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [visibleCount, setVisibleCount] = useState(PAGE_SIZE);
+
+  // User profile state for dynamic deterministic evaluation
+  const [userProfile, setUserProfile] = useState(DEFAULT_PROFILE);
+
+  const loadProfile = useCallback(async () => {
+    if (!isSignedIn) return;
+    try {
+      const token = await getToken();
+      const prof = await ApiClient.getProfile(token);
+      if (prof) {
+        setUserProfile((prev) => ({
+          ...prev,
+          stateCode: prof.state_code || prev.stateCode,
+          educationLevel: prof.education_level || prev.educationLevel,
+          annualFamilyIncome: prof.annual_family_income != null ? Number(prof.annual_family_income) : prev.annualFamilyIncome,
+          category: prof.category || prev.category,
+        }));
+      }
+    } catch {
+      // Use default profile on error
+    }
+  }, [isSignedIn, getToken]);
+
+  const fetchSchemes = useCallback(async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+    try {
+      const stateParam = selectedState === "all" ? undefined : selectedState === "central" ? "CENTRAL" : selectedState;
+      const data = await ApiClient.listSchemes(stateParam);
+      if (Array.isArray(data)) {
+        setSchemes(data);
+      }
+    } catch (err: any) {
+      setErrorMessage(err.message || "Failed to load welfare schemes");
+    } finally {
+      setIsLoading(false);
+    }
+  }, [selectedState]);
+
+  useEffect(() => {
+    if (isLoaded) {
+      loadProfile();
+    }
+  }, [isLoaded, loadProfile]);
+
+  useEffect(() => {
+    fetchSchemes();
+  }, [fetchSchemes]);
+
+  // Reset pagination on filter change
+  useEffect(() => {
+    setVisibleCount(PAGE_SIZE);
+  }, [searchQuery, selectedCategory, selectedState]);
+
+  const handleResetProfile = () => {
+    setUserProfile(DEFAULT_PROFILE);
+  };
+
+  // Filter schemes
+  const filteredSchemes = schemes.filter((scheme) => {
+    const name = (scheme.name || "").toLowerCase();
+    const description = (scheme.description || "").toLowerCase();
+    const authority = (scheme.authority || "").toLowerCase();
+    const query = searchQuery.toLowerCase();
+    const matchesSearch = name.includes(query) || description.includes(query) || authority.includes(query);
+
+    const schemeCategory = (scheme.category || "").toLowerCase();
+    const matchesCategory =
+      selectedCategory === "all" || schemeCategory.includes(selectedCategory.toLowerCase());
+
+    const schemeState = scheme.state_code || scheme.stateCode;
+    const matchesState =
+      selectedState === "all" ||
+      (selectedState === "central" && !schemeState) ||
+      schemeState === selectedState;
+
+    return matchesSearch && matchesCategory && matchesState;
   });
 
-  const schemes = [
-    {
-      id: "s1000000-0000-0000-0000-000000000002",
-      name: "Jagananna Vidya Deevena (RTF)",
-      authority: "Government of Andhra Pradesh",
-      portal_url: "https://jnanabhumi.ap.gov.in",
-      state: "Andhra Pradesh",
-      description: "Full college tuition fee reimbursement for polytechnic, degree, engineering, and PG students.",
-      rules: [
-        { desc: "State of residence is Andhra Pradesh", satisfied: userProfile.state_code === "AP" },
-        { desc: "Annual family income <= ₹2,50,000", satisfied: userProfile.annual_family_income <= 250000 },
-        { desc: "Education level is diploma, undergraduate, or PG", satisfied: ["diploma", "undergraduate", "postgraduate"].includes(userProfile.education_level) },
-      ],
-      documents: ["Integrated Caste Certificate", "Income Certificate / White Ration Card", "Student Aadhaar", "Mother Aadhaar & Bank Details"],
-      deadline: "31 Oct 2026",
-    },
-    {
-      id: "s1000000-0000-0000-0000-000000000004",
-      name: "AICTE Pragati Scholarship for Girl Students",
-      authority: "All India Council for Technical Education (Central)",
-      portal_url: "https://www.aicte-india.org",
-      state: "All India",
-      description: "₹50,000 per annum scholarship for girl students admitted to technical degree or diploma courses.",
-      rules: [
-        { desc: "Applicant gender is female", satisfied: userProfile.gender === "female" },
-        { desc: "Annual family income <= ₹8,00,000", satisfied: userProfile.annual_family_income <= 800000 },
-      ],
-      documents: ["10th / 12th Marksheet", "Admission Allotment Letter", "Tehsildar Income Certificate"],
-      deadline: "15 Dec 2026",
-    },
-    {
-      id: "s1000000-0000-0000-0000-000000000001",
-      name: "Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)",
-      authority: "Ministry of Agriculture & Farmers Welfare",
-      portal_url: "https://pmkisan.gov.in",
-      state: "All India",
-      description: "Financial benefit of ₹6,000 per year in three installments for landholding farmer families.",
-      rules: [
-        { desc: "Registered as small/marginal farmer family", satisfied: userProfile.category === "farmer" },
-      ],
-      documents: ["Aadhaar Card", "Land Ownership Record", "Aadhaar-Linked Bank Account"],
-      deadline: "31 Dec 2026",
-    },
-  ];
+  const displayedSchemes = filteredSchemes.slice(0, visibleCount);
+  const hasMore = visibleCount < filteredSchemes.length;
+
+  const handleLoadMore = () => {
+    setVisibleCount((prev) => Math.min(prev + PAGE_SIZE, filteredSchemes.length));
+  };
 
   return (
-    <div className="space-y-6 max-w-5xl mx-auto">
-      <div>
-        <div className="flex items-center gap-2">
-          <Landmark className="w-6 h-6 text-purple-600" />
-          <h1 className="text-2xl font-extrabold tracking-tight">
-            SchemeConnect — Public Services & Welfare Intelligence
-          </h1>
-        </div>
-        <p className="text-sm opacity-80 mt-1">
-          Deterministic eligibility evaluation evaluated strictly against official criteria.
-          Zero hallucinations, zero false guarantees.
-        </p>
-      </div>
+    <PullToRefresh onRefresh={fetchSchemes} className="space-y-8">
+      <PageHeader
+        title="SchemeConnect Welfare Discovery"
+        description="Deterministic evaluation against official eligibility rules. Discover citizen benefits, review matching criteria, and generate custom verification checklists without AI hallucination."
+        badge={<Badge variant="primary">Deterministic Rules Engine</Badge>}
+        breadcrumbs={[
+          { label: "Dashboard", href: "/dashboard" },
+          { label: "SchemeConnect" },
+        ]}
+      />
 
-      {/* Interactive Profile Simulation Box */}
-      <div className="p-5 rounded-xl border border-border bg-card space-y-4">
-        <div className="flex items-center justify-between">
-          <span className="font-bold text-sm flex items-center gap-2">
-            <Filter className="w-4 h-4 text-primary" />
-            <span>Citizen Profile Attributes (Test Criteria Live)</span>
-          </span>
-          <span className="text-xs opacity-75">Used for deterministic Boolean evaluation</span>
-        </div>
+      {/* Filter and Search Bar */}
+      <div className="flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4">
+        <SearchInput
+          value={searchQuery}
+          onChangeValue={setSearchQuery}
+          placeholder="Search schemes by name, keyword, or authority..."
+          className="flex-1 max-w-lg"
+        />
 
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-xs">
-          <div>
-            <label className="font-semibold block mb-1">State</label>
-            <select
-              value={userProfile.state_code}
-              onChange={(e) => setUserProfile({ ...userProfile, state_code: e.target.value })}
-              className="w-full p-2 rounded border border-border bg-background focus:ring-1 focus:ring-primary"
-            >
-              <option value="AP">Andhra Pradesh (AP)</option>
-              <option value="TG">Telangana (TG)</option>
-              <option value="TN">Tamil Nadu (TN)</option>
-              <option value="KA">Karnataka (KA)</option>
-              <option value="MH">Maharashtra (MH)</option>
-              <option value="DL">Delhi (DL)</option>
-            </select>
-          </div>
+        <div className="flex flex-wrap items-center gap-2.5">
+          <FilterDropdown
+            label="Category"
+            selectedValue={selectedCategory}
+            onSelect={setSelectedCategory}
+            options={[
+              { label: "All Schemes", value: "all" },
+              { label: "Scholarships", value: "scholarship" },
+              { label: "Higher Education", value: "education" },
+              { label: "Agriculture", value: "agriculture" },
+            ]}
+          />
 
-          <div>
-            <label className="font-semibold block mb-1">Family Income (₹ / yr)</label>
-            <input
-              type="number"
-              value={userProfile.annual_family_income}
-              onChange={(e) =>
-                setUserProfile({
-                  ...userProfile,
-                  annual_family_income: parseFloat(e.target.value) || 0,
-                })
-              }
-              className="w-full p-2 rounded border border-border bg-background focus:ring-1 focus:ring-primary"
-            />
-          </div>
-
-          <div>
-            <label className="font-semibold block mb-1">Education Level</label>
-            <select
-              value={userProfile.education_level}
-              onChange={(e) =>
-                setUserProfile({ ...userProfile, education_level: e.target.value })
-              }
-              className="w-full p-2 rounded border border-border bg-background focus:ring-1 focus:ring-primary"
-            >
-              <option value="undergraduate">Undergraduate (B.Tech / B.Sc)</option>
-              <option value="diploma">Polytechnic / Diploma</option>
-              <option value="postgraduate">Postgraduate</option>
-              <option value="high_school">10th / 12th Standard</option>
-            </select>
-          </div>
-
-          <div>
-            <label className="font-semibold block mb-1">Gender</label>
-            <select
-              value={userProfile.gender}
-              onChange={(e) => setUserProfile({ ...userProfile, gender: e.target.value })}
-              className="w-full p-2 rounded border border-border bg-background focus:ring-1 focus:ring-primary"
-            >
-              <option value="female">Female</option>
-              <option value="male">Male</option>
-              <option value="other">Other</option>
-            </select>
-          </div>
+          <FilterDropdown
+            label="Jurisdiction"
+            selectedValue={selectedState}
+            onSelect={setSelectedState}
+            options={[
+              { label: "All Jurisdictions", value: "all" },
+              { label: "Andhra Pradesh (State)", value: "AP" },
+              { label: "Central Only", value: "central" },
+            ]}
+          />
         </div>
       </div>
 
-      {/* Scheme Cards List */}
-      <div className="space-y-4">
-        {schemes.map((scheme) => {
-          const allSatisfied = scheme.rules.every((r) => r.satisfied);
-          return (
-            <div
-              key={scheme.id}
-              className={`p-6 rounded-xl border transition-all ${
-                allSatisfied
-                  ? "border-green-300 dark:border-green-800 bg-green-50/20 dark:bg-green-950/10"
-                  : "border-border bg-card"
-              }`}
-            >
-              <div className="flex flex-wrap items-start justify-between gap-3">
-                <div className="space-y-1">
-                  <div className="flex items-center gap-2">
-                    <h3 className="font-bold text-base">{scheme.name}</h3>
-                    <span
-                      className={`text-xs px-2.5 py-0.5 rounded-full font-bold flex items-center gap-1 ${
-                        allSatisfied
-                          ? "bg-green-200 text-green-900 dark:bg-green-800 dark:text-green-100"
-                          : "bg-red-100 text-red-800 dark:bg-red-950 dark:text-red-300"
-                      }`}
-                    >
-                      {allSatisfied ? (
-                        <>
-                          <CheckCircle2 className="w-3.5 h-3.5" />
-                          <span>Eligible</span>
-                        </>
-                      ) : (
-                        <>
-                          <XCircle className="w-3.5 h-3.5" />
-                          <span>Not Eligible</span>
-                        </>
-                      )}
-                    </span>
-                  </div>
-                  <p className="text-xs opacity-75">{scheme.authority} · State: {scheme.state}</p>
-                </div>
+      {errorMessage && (
+        <div className="p-3 bg-rose-500/10 border border-rose-500/30 rounded-xl text-rose-400 text-xs flex items-center gap-2">
+          <AlertCircle className="w-4 h-4 shrink-0" />
+          <span>{errorMessage}</span>
+        </div>
+      )}
 
-                <a
-                  href={scheme.portal_url}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="px-3 py-1.5 rounded-lg border border-border hover:bg-accent text-xs font-semibold flex items-center gap-1.5 focus-visible:ring-2"
-                >
-                  <span>Official Portal</span>
-                  <ExternalLink className="w-3.5 h-3.5 text-primary" />
-                </a>
-              </div>
+      {/* Two Column Layout: Eligibility Form on Left, Schemes on Right */}
+      <div className="grid lg:grid-cols-3 gap-6">
+        <div className="lg:col-span-1 space-y-6">
+          <EligibilityForm
+            profile={userProfile}
+            onChangeProfile={setUserProfile}
+            onReset={handleResetProfile}
+          />
+        </div>
 
-              <p className="text-sm opacity-90 mt-3 leading-relaxed">{scheme.description}</p>
+        <div className="lg:col-span-2 space-y-4">
+          <div className="flex items-center justify-between text-xs sm:text-sm text-muted">
+            <span className="font-semibold text-foreground">
+              Showing {displayedSchemes.length} of {filteredSchemes.length} Government Schemes
+            </span>
+            <span>Deterministic Rule Evaluation</span>
+          </div>
 
-              {/* Evaluated Criteria List */}
-              <div className="mt-4 pt-4 border-t border-border grid md:grid-cols-2 gap-4 text-xs">
-                <div>
-                  <span className="font-bold uppercase tracking-wider text-[11px] opacity-75 block mb-2">
-                    Deterministic Criteria Breakdown
-                  </span>
-                  <ul className="space-y-1.5">
-                    {scheme.rules.map((rule, idx) => (
-                      <li key={idx} className="flex items-center gap-2">
-                        {rule.satisfied ? (
-                          <CheckCircle2 className="w-4 h-4 text-green-600 shrink-0" />
-                        ) : (
-                          <XCircle className="w-4 h-4 text-red-600 shrink-0" />
-                        )}
-                        <span className={rule.satisfied ? "font-medium" : "text-red-600 font-medium"}>
-                          {rule.desc}
-                        </span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-
-                <div>
-                  <span className="font-bold uppercase tracking-wider text-[11px] opacity-75 block mb-2">
-                    Required Document Checklist
-                  </span>
-                  <ul className="space-y-1 text-opacity-80">
-                    {scheme.documents.map((doc, idx) => (
-                      <li key={idx} className="flex items-center gap-2">
-                        <FileCheck className="w-3.5 h-3.5 text-primary shrink-0" />
-                        <span>{doc}</span>
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              </div>
+          {isLoading ? (
+            <div className="grid gap-4">
+              <SchemeCardSkeleton count={4} />
             </div>
-          );
-        })}
+          ) : filteredSchemes.length === 0 ? (
+            <EmptyState
+              title="No Schemes Found"
+              description={
+                searchQuery || selectedCategory !== "all" || selectedState !== "all"
+                  ? "No welfare schemes match the selected filters. Try broadening your category or resetting the search term."
+                  : "No government schemes are currently available in the database."
+              }
+              actionLabel="Reset Search & Filters"
+              onAction={() => {
+                setSearchQuery("");
+                setSelectedCategory("all");
+                setSelectedState("all");
+              }}
+            />
+          ) : (
+            <InfiniteScroll
+              hasMore={hasMore}
+              isLoading={false}
+              onLoadMore={handleLoadMore}
+              endMessage="All government schemes loaded."
+            >
+              <div className="grid gap-4">
+                {displayedSchemes.map((scheme, idx) => (
+                  <SchemeCard
+                    key={scheme.id || `scheme-${idx}`}
+                    scheme={scheme}
+                    userProfile={userProfile}
+                    onOpenChecklist={(s) => setActiveChecklistScheme(s)}
+                  />
+                ))}
+              </div>
+            </InfiniteScroll>
+          )}
+        </div>
       </div>
-    </div>
+
+      {/* Checklist Dialog Modal */}
+      <DocumentChecklistModal
+        scheme={activeChecklistScheme}
+        onClose={() => setActiveChecklistScheme(null)}
+      />
+    </PullToRefresh>
   );
 }

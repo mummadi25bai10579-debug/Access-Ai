@@ -62,6 +62,51 @@ class EducationService:
         prompt = f"Generate {num_questions} multiple-choice quiz questions on topic: '{topic}' at {difficulty_level} level."
         return await self.orchestrator.provider.generate_structured(prompt, schema)
 
+    def evaluate_quiz_submission(
+        self,
+        user_id: str,
+        course_id: Optional[str],
+        answers: Optional[List[Dict[str, Any]]],
+        client_score: Optional[float] = None,
+        total_questions: Optional[int] = None,
+        gap_analysis: Optional[List[Any]] = None,
+    ) -> Dict[str, Any]:
+        """
+        Deterministically evaluates quiz answers on the backend.
+        Never trusts client-supplied scores when answers are present.
+        """
+        if answers and len(answers) > 0:
+            total = len(answers)
+            correct = 0
+            computed_gap = []
+            for a in answers:
+                sel = a.get("selected_option_index")
+                cor = a.get("correct_option_index")
+                if sel is not None and cor is not None and sel == cor:
+                    correct += 1
+                else:
+                    computed_gap.append({
+                        "question_id": a.get("question_id"),
+                        "selected_option_index": sel,
+                        "correct_option_index": cor,
+                        "explanation": a.get("explanation", "Incorrect answer."),
+                    })
+            final_score = round((correct / total) * 100.0, 1)
+            final_total = total
+            final_gap = computed_gap
+        else:
+            final_score = client_score if client_score is not None else 0.0
+            final_total = total_questions if total_questions is not None else 1
+            final_gap = gap_analysis or []
+
+        return self.repository.record_quiz_attempt(
+            user_id=user_id,
+            course_id=course_id,
+            score=final_score,
+            total_questions=final_total,
+            gap_analysis=final_gap,
+        )
+
     def generate_learning_path(self, target_role: str, user_skills: List[str]) -> Dict[str, Any]:
         pathway = [
             {"step": 1, "topic": "Python Programming Foundations", "status": "completed" if "python" in [s.lower() for s in user_skills] else "recommended"},

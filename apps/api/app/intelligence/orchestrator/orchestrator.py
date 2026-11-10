@@ -30,11 +30,14 @@ class AIOrchestrator:
         lang_meta = get_language_meta(target_language)
         sys_prompt = GROUNDED_QA_SYSTEM_PROMPT.format(target_language=lang_meta["name"])
 
-        # Format context excerpts
+        # Format context excerpts with unambiguous provenance headers
         context_blocks = []
         for c in chunks:
+            doc_id_val = str(c.get("document_id") or document_id).strip()
+            page_val = int(c.get("page_number", 1))
+            chunk_idx_val = int(c.get("chunk_index", 0))
             context_blocks.append(
-                f"[Page {c.get('page_number', 1)}, Chunk {c.get('chunk_index', 0)}]:\n{c.get('content', '')}"
+                f"[Doc {doc_id_val}, Page {page_val}, Chunk {chunk_idx_val}]:\n{c.get('content', '')}"
             )
         context_str = "\n\n".join(context_blocks)
 
@@ -43,7 +46,8 @@ class AIOrchestrator:
 </untrusted_document_context>
 
 User Question: {question}
-Answer in {lang_meta['name']}:"""
+Answer in {lang_meta['name']}:
+Provide your answer strictly based on the excerpts above. For each factual claim in your answer, you MUST provide a citation referencing the exact document_id, page_number, chunk_index, and quoted_text from the excerpt headers above."""
 
         schema = {
             "type": "object",
@@ -60,6 +64,7 @@ Answer in {lang_meta['name']}:"""
                             "chunk_index": {"type": "integer"},
                             "quoted_text": {"type": "string"},
                         },
+                        "required": ["document_id", "page_number", "chunk_index", "quoted_text"],
                     },
                 },
             },
@@ -69,7 +74,11 @@ Answer in {lang_meta['name']}:"""
         raw_result = await self.provider.generate_structured(user_prompt, schema, system_prompt=sys_prompt)
         answer = raw_result.get("answer", "")
         citations = raw_result.get("citations", [])
-        verified_citations = self.verifier.verify_citations(citations, chunks)
+        verified_citations = self.verifier.verify_citations(
+            citations,
+            chunks,
+            expected_document_id=document_id,
+        )
         tier = self.verifier.classify_evidence_tier(answer, verified_citations)
 
         return {

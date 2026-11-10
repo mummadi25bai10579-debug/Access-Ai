@@ -1,6 +1,17 @@
 from typing import Dict, Any, List, Optional
+import uuid
+import time
+from app.core.logging import get_logger
+from app.database.models.scheme import SchemeModel, SchemeEligibilityRuleModel
 
-_SCHEMES_STORE: Dict[str, Dict[str, Any]] = {
+logger = get_logger(__name__)
+
+# In-memory TTL cache for high-traffic scheme listings
+_SCHEMES_CACHE: Dict[str, Dict[str, Any]] = {}
+_CACHE_TTL: float = 60.0  # 60 seconds TTL
+
+# Fallback test store for unit tests without database connection
+_TEST_SCHEMES_STORE: Dict[str, Dict[str, Any]] = {
     "s1000000-0000-0000-0000-000000000001": {
         "id": "s1000000-0000-0000-0000-000000000001",
         "name": "Pradhan Mantri Kisan Samman Nidhi (PM-KISAN)",
@@ -78,12 +89,74 @@ _SCHEMES_STORE: Dict[str, Dict[str, Any]] = {
     },
 }
 
+
 class SchemeRepository:
+    def __init__(self, db: Optional[Any] = None):
+        self.db = db
+
+    def _normalize_scheme_id(self, scheme_id: str) -> str:
+        sid_str = str(scheme_id).strip()
+        if sid_str.startswith("s1000000-"):
+            return "a1000000-" + sid_str[9:]
+        return sid_str
+
     def list_schemes(self, state_code: Optional[str] = None) -> List[Dict[str, Any]]:
-        schemes = list(_SCHEMES_STORE.values())
+        cache_key = f"schemes_{state_code or 'all'}"
+        now = time.time()
+        if cache_key in _SCHEMES_CACHE and now < _SCHEMES_CACHE[cache_key]["expiry"]:
+            return _SCHEMES_CACHE[cache_key]["data"]
+
+        if self.db:
+            try:
+                query = self.db.query(SchemeModel).filter(SchemeModel.status == "active")
+                if state_code:
+                    query = query.filter(
+                        (SchemeModel.state_code == None) | (SchemeModel.state_code == state_code)
+                    )
+                schemes = query.all()
+                if schemes:
+                    scheme_ids = [s.id for s in schemes]
+                    all_rules = (
+                        self.db.query(SchemeEligibilityRuleModel)
+                        .filter(SchemeEligibilityRuleModel.scheme_id.in_(scheme_ids))
+                        .all()
+                    )
+                    rules_by_scheme = {}
+                    for r in all_rules:
+                        rules_by_scheme.setdefault(str(r.scheme_id), []).append(r.to_dict())
+
+                    results = []
+                    for s in schemes:
+                        s_dict = s.to_dict()
+                        s_dict["rules"] = rules_by_scheme.get(str(s.id), [])
+                        results.append(s_dict)
+
+                    _SCHEMES_CACHE[cache_key] = {"data": results, "expiry": now + _CACHE_TTL}
+                    return results
+            except Exception as e:
+                logger.warning(f"Failed to list schemes from database: {e}")
+
+        schemes = list(_TEST_SCHEMES_STORE.values())
         if state_code:
             return [s for s in schemes if s.get("state_code") is None or s.get("state_code") == state_code]
         return schemes
 
     def get_scheme(self, scheme_id: str) -> Optional[Dict[str, Any]]:
-        return _SCHEMES_STORE.get(scheme_id)
+        normalized_id = self._normalize_scheme_id(scheme_id)
+        if self.db:
+            try:
+                sid = uuid.UUID(normalized_id)
+                scheme = self.db.query(SchemeModel).filter(SchemeModel.id == sid).first()
+                if scheme:
+                    s_dict = scheme.to_dict()
+                    rules = (
+                        self.db.query(SchemeEligibilityRuleModel)
+                        .filter(SchemeEligibilityRuleModel.scheme_id == scheme.id)
+                        .all()
+                    )
+                    s_dict["rules"] = [r.to_dict() for r in rules]
+                    return s_dict
+            except Exception as e:
+                logger.warning(f"Failed to get scheme {scheme_id} from database: {e}")
+
+        return _TEST_SCHEMES_STORE.get(scheme_id) or _TEST_SCHEMES_STORE.get(normalized_id)

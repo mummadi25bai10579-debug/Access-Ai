@@ -1,0 +1,25 @@
+services:
+  - type: web
+    name: accessai-backend
+    env: docker
+    dockerfilePath: apps/api/Dockerfile
+    dockerContext: apps/api
+    healthCheckPath: /health/ready
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LLM_PROVIDER
+        value: gemini
+      - key: LLM_MODEL
+        value: gemini-3.5-flash
+      - key: EMBEDDING_PROVIDER
+        value: gemini
+      - key: EMBEDDING_MODEL
+        value: gemini-embedding-001
+      - key: EMBEDDING_DIMENSION
+        value: "384"
+      - key: LOG_LEVEL
+        value: INFO
+

@@ -40,12 +40,17 @@ class MockAIProvider(AIProvider):
                 ],
             }
         if "question" in prompt.lower() or "citations" in str(schema).lower():
+            import re
+            doc_id = "mock-doc-uuid"
+            doc_match = re.search(r"\[Doc\s+([a-zA-Z0-9_\-]+)", prompt)
+            if doc_match:
+                doc_id = doc_match.group(1)
             return {
                 "answer": "The application deadline is December 31st, 2026, as specified in the official circular.",
                 "confidence": "high",
                 "citations": [
                     {
-                        "document_id": "mock-doc-uuid",
+                        "document_id": doc_id,
                         "page_number": 1,
                         "chunk_index": 0,
                         "quoted_text": "The final submission deadline is 31st December 2026.",
@@ -57,6 +62,7 @@ class MockAIProvider(AIProvider):
     async def embed(
         self,
         texts: List[str],
+        task_type: str = "RETRIEVAL_DOCUMENT",
     ) -> List[List[float]]:
         """
         Generates pseudo-random 384-dimensional unit vectors derived from text hash.
